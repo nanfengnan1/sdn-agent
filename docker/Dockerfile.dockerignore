@@ -1,0 +1,11 @@
+**
+!sdn-agent/
+!sdn-agent/go.mod
+!sdn-agent/go.sum
+!sdn-agent/api/**
+!sdn-agent/internal/**
+!sdn-agent/cmd/**
+!sdn-agent/docker/**
+**/state/**
+**/.env
+**/*.log

@@ -1,0 +1,875 @@
+# SDN Controller 与 Agent 能力及组件设计
+
+更新日期：2026-10-25。
+
+本文保留项目职责与长期设计约定。2026-10-24 已开始落地 Go 版本；当前实现范围与限制以 [README](README.md)、[协议](api/agent/v1/agent.proto)、[操作目录](docs/operations.md) 和 [事务说明](docs/transactions.md) 为准。下文未标为已实现的组件仍是目标设计，不表示已经交付。
+
+## 0. 当前实现映射
+
+### 2026-10-25：独立资源与结构化 Query
+
+保持原 op 编号和协议版本，增加 OSPFv3、BGP IPv4/IPv6 unicast、显式 EVPN Type-5 发布及 `Query` / `VerifyResources` RPC。新增能力通过 `Capabilities.queries` 与 `features` 协商；只安装 Linux 驱动时不会宣称 FRR 查询可用。
+
+```text
+Controller / sdnctl
+  ├─ Begin → Stage(typed operations + depends_on) → Commit → Task/Watch
+  │    └─ Candidate → Registry.Plan → Prepare/Undo journal
+  │         → Linux / FRR Apply → Verify → Running revision
+  │         └─ 失败：反向补偿，读回恢复结果
+  ├─ Query(kind + VRF/BD/interface/AF + page token)
+  │    └─ Querier → Linux ip/bridge JSON 或 FRR show JSON
+  │         → records + source + 采集时间 + Running revision
+  └─ VerifyResources(expected_revision + present desired operations)
+       └─ 执行锁/提交锁 → 版本与任务屏障 → 全后端只读 Validate/Verify
+            → verified + errors；不执行配置
+```
+
+VRF、BD、VXLAN 和它们的绑定分别建模。L3VNI 绑定前必须已有对应 Linux VRF、桥与 VXLAN 关联。TENANTS 查询合并 Linux 与 FRR 实际状态，保留未绑定资源。ARP/ND 抑制是桥端口能力，不能等同于主动探测或 MAC 保活。
+
+Query 不返回裸 CLI 字符串，不把后端错误当作空表。分页令牌绑定结果摘要；动态数据变化返回 `Aborted`，不承诺冻结快照。EVPN_ROUTES 是全局 EVPN RIB，Type-5 可按 route_type/prefix 查询；租户关联由 EVPN_VNI/TENANTS 提供。
+
+OSPFv3 使用 `ospf6d`，镜像监督其存活；运行旧持久化 daemons 配置时也确保该进程启用。IPv6 地址、邻居和路由可查询，Agent 不默认关闭 IPv6。
+
+操作示例、查询和限制见 [用户资源手册](docs/user/resources.rst)；字段兼容、只读导入验证和测试见 [开发资源手册](docs/developer/resources.rst)。
+
+阅读入口：当前分层架构见 [3.3](#33-当前实现的分层架构)，内部组件及代码映射见 [3.4](#34-当前实现的内部架构与代码映射)，配置、注册心跳、状态查询及重启恢复时序见 [9.6](#96-当前-go-实现的请求时序)。第 3.1 节保留长期目标拓扑，不能将其中全部组件理解为已实现。
+
+- `cmd/sdn-agent`：双向 gRPC 身份注册/心跳、Agent 服务、进程锁、TLS/token 配置。
+- `internal/agent`：Candidate、commit、串行 DAG 执行、全部后端参与、任务查询/事件重放、失败补偿和进程重启恢复。
+- `internal/agent/recovery.go`：带 sequence/revision 校验及幂等收据的 RetryRollback；按逆依赖顺序恢复原 Undo，验证成功后解除节点屏障。主机重建后配置恢复仍见 [待办](docs/backlog.md)。
+- `internal/adapters/linux`：bridge、VRF、VXLAN、接口/地址、绑定、sysctl 和静态路由。
+- `internal/adapters/frr`：OSPF、BGP 基础与 EVPN、L3VNI、配置回读与独占实例快照回滚。
+- `internal/store`：Redis 同 DB 内逻辑命名空间和开发用持久文件；Running 当前使用已成功提交的类型化操作日志。
+- `cmd/mock-controller` / `cmd/sdnctl` / `lab/run.py`：模拟 Controller、真实 RPC 客户端、隔离 Spine/Leaf 实验。
+- 当前协议使用静态 `oneof` 类型；不是动态 Any schema 分发。当前后端为进程内 Driver；远程 Adapter client 管理、FPM/ZAPI、主动 ARP/ND、全网拓扑聚合、资源级 diff 和本机 etcd 尚未实现。
+
+## 1. 已确认的范围与行为
+
+- `sdn-controller` 是独立项目，管理全网 Leaf 和 Spine；`sdn-agent` 是独立项目，维护本地 Leaf。
+- 支持多个控制面来源，以及 Linux、VPP、交换机、FRR 配置等不同执行后端。
+- Agent 与 Controller 使用 gRPC 通信，双方分别提供 Client 和 Server；op 及其参数通过 Protobuf 定义。
+- Agent 首次启动生成候选 UUID，与 Controller 确认身份。首次注册发生 ID 冲突时，由 Controller 分配未占用的 UUID；后续管理消息携带最终 `node_id`。
+- 节点管理状态只保留 `INIT`、`RUNNING`、`DOWN`，暂不增加复杂的节点状态机或负载状态机。
+- Redis 使用 Candidate、Running、Operational 三类逻辑数据库保存本地信息，并持久保存事务与任务记录。
+- 本节点一个 op 的所有注册实现都参与执行，并按依赖关系安排顺序，不从多个注册实现中任意选择一个。
+- 配置修改先进入 Candidate；客户端显式调用 `commit` 后，服务器开始事务执行。失败时回滚已经产生的配置修改。
+- 一次 commit 的事务范围是单节点的全部相关后端。跨节点变更由 Controller 协调，第一版不承诺多节点原子提交。
+- 使用任务 ID、状态订阅和结果查询获取执行结果。受理成功与执行成功分别确认。
+- Agent 已持久受理 commit 后，即使与 Controller 断连，也继续执行；执行失败才进入回滚，重连后可查询和补报结果。
+- 保留 FRR EVPN Type-2、Type-3 学习与拓扑上报能力；FRR 继续负责分布式路由协议。
+
+当前已通过显式 `depends_on` 生成 DAG，拓扑排序后串行执行；正式协议已落地为 [agent.proto](api/agent/v1/agent.proto) 中的静态 `oneof`、操作码、RPC 和错误结果字段。下文的动态扩展容器、资源级差异计算等仍是后续设计，不代表当前协议支持这些能力。
+
+组件首先是逻辑模块，不要求每个模块都是一个进程。自有进程间接口可以采用 gRPC，外部 FRR、Linux、VPP 等继续使用其实际支持的接口。
+
+## 2. sdn-controller 的能力
+
+| 组件 | 能力与职责 | 主要输出 |
+| --- | --- | --- |
+| North API | 向网管、CLI 和自动化系统提供配置、查询、拓扑与任务接口；预留 REST、NETCONF 等协议适配 | 统一的资源请求 |
+| Global Resource Manager | 管理租户、网络、策略、资源归属；维护 VNI、RT、地址等分配和校验规则 | 全局期望配置 |
+| Node Inventory | 管理 Leaf/Spine 身份、角色、接口、执行后端、能力、连接状态和软件版本 | 节点清单与能力视图 |
+| Global Planner | 决定资源部署在哪些节点；将全网资源转换成各节点期望配置；协调跨节点依赖与执行进度 | 带版本的节点配置 |
+| Southbound Manager | 根据节点接入方式选择 Agent 通道或设备管理适配器 | 节点配置交付和状态接入 |
+| Agent Gateway | Controller gRPC Server 接受注册、能力和状态上报；Controller gRPC Client 调用 Agent 的事务、订阅和查询服务 | 配置事务与状态消息 |
+| Spine Device Adapters | Agent 仅部署在 Leaf 时，通过 Spine 支持的管理接口配置和查询 Spine | Spine 配置结果与观测 |
+| Topology Service | 合并配置、EVPN、接口、LLDP、FDB、邻居等信息，形成物理、Overlay、主机位置视图 | 全网拓扑与数据来源 |
+| Task / Health Service | 跟踪配置是否接收、执行和生效；呈现失败原因、受影响节点和过期观测 | 任务结果、告警与健康状态 |
+| Storage / Coordination | 使用 etcd 保存全局配置、节点登记、资源分配、版本和协调信息 | 可恢复的全局状态 |
+
+Controller 负责配置哪些路由协议、网络和策略；动态 EVPN 选路与路由交换在此设计中继续由 FRR 执行。
+
+管理节点离线与路由不可达是不同的事件。Agent 心跳超时应标记管理状态和观测新鲜度，不能直接当作 EVPN 路由撤销依据。
+
+## 3. sdn-agent 的组件职责
+
+本表及 3.1 节描述目标职责划分，包含尚未实现的组件。当前 Go 实现将多个职责合并在一个 Agent 进程中，具体边界见 3.3、3.4 节。
+
+| 分组 | 组件 | 职责 |
+| --- | --- | --- |
+| 节点管理 | Identity / Session Manager | 身份持久化、注册、能力协商、节点状态和管理会话恢复 |
+| 北向接入 | Agent gRPC Server | 接收事务编辑、commit、结果查询和状态订阅请求 |
+| 北向接入 | Agent gRPC Client | 调用 Controller 的注册、能力报告、心跳和状态上报服务 |
+| Front Adapter | Protocol / Resource API | 解码 Protobuf，校验身份、op 与 data 类型、资源归属和版本，转换内部资源模型 |
+| Front Adapter | Candidate Manager | 管理每个事务的候选配置及基础版本；提交前不修改后端 |
+| Front Adapter | Transaction / Task Manager | 管理 commit、锁、持久化任务、执行进度、提交、回滚、订阅与恢复 |
+| Front Adapter | Planner / Executor | 计算配置差异，展开全部后端步骤，建立 DAG，按顺序调用并核对结果 |
+| Backend Adapter | Client Manager | 按配置文件或 CLI 接入后端，维护 client、通道、连接状态与重连 |
+| Backend Adapter | Op Registry | 维护 op 到全部注册实现的映射及其能力、依赖、生命周期接口 |
+| Backend Adapter | Backend Drivers | 将统一资源操作转换为 Linux、VPP、交换机、FRR 等后端 API |
+| 本地观测 | Service Adapters / Event Normalizer | 接收或采集外部控制面信息，规范化来源、网络上下文和事件序号 |
+| 本地观测 | Local Observers / Reconciler | 采集实际状态，对比 Running 与 Operational，发现偏差并按明确恢复策略处理 |
+| 本地维护 | Neighbor Maintenance | 按已提交策略维护本地接入主机的 ARP/ND 探测 |
+| 状态输出 | State Reporter / Task Events | 提供状态快照、增量和可恢复的任务状态通知 |
+| 本地存储 | Redis Storage | Candidate、Running、Operational，以及事务、任务、步骤日志和身份记录 |
+
+### 3.1 组件拓扑（目标设计）
+
+```text
+                         sdn-controller
+                gRPC Client          gRPC Server
+                     |                    ^
+       edit / commit / query / watch      | register / report / heartbeat
+                     v                    |
+             Agent gRPC Server     Agent gRPC Client
+                     |                    ^
+                     v                    |
+             Front Adapter          State Reporter
+             Protocol / Resource API      ^
+                     |                    |
+                     v              Operational DB
+             Candidate Manager            ^
+                     |                    |
+                     v            Local Observers / Service Adapters
+               Candidate DB               ^
+                     |                    |
+                     | commit      Backends / FRR / FPM / Others
+                     v
+             Transaction / Task Manager <----> Task Store
+                     |
+                     v
+             Planner / DAG Executor
+                     |
+                     v
+             Backend Adapter Registry <---- Client Manager
+                     |
+                     +------ Linux Driver ------> Linux
+                     +------ VPP Driver --------> VPP
+                     +------ Switch Driver -----> Switch
+                     +------ FRR Driver --------> FRR
+
+     All required steps verified -> commit Running DB
+     Failure -> reverse dependency rollback -> verify result
+     Running DB <-> Local Reconciler <-> Operational DB
+     Task Store -> Agent Server: WatchTasks / GetTask
+```
+
+图中控制面学习数据保存在 Operational 的独立来源空间，例如 `operational/learned/`，不会自动覆盖配置。Local Observers 负责回读实际对象；Task Store 保存任务结果，通知只是结果的传递方式。
+
+Neighbor Maintenance 从 Running 读取已提交策略，从 Operational 获取探测对象；结果依靠后端实际事件或查询确认。发送探测报文本身不能作为主机仍然存活的证据。
+
+### 3.2 第一版需要覆盖的资源能力
+
+| 资源 | 期望支持的操作 |
+| --- | --- |
+| Bridge Domain | 创建、删除、查询和修改 BD；维护成员接口 |
+| 网关接口 | 为 BD 对应的 SVI/BVI 配置 IPv4/IPv6 地址，并管理租户归属 |
+| L2VNI | BD 与 L2VNI 的绑定、解除和状态查询 |
+| VXLAN | 创建、删除、查询隧道；明确其 L2/L3 使用上下文 |
+| Tenant / VRF | 创建、删除、查询租户与 VRF；维护租户与二层网络的关联 |
+| L3VNI | 配置租户与 L3VNI 的关联；由具体后端落实需要的对象 |
+| 静态 MAC | 增加、删除、查询静态 MAC 转发表项 |
+| 邻居与 MAC 策略 | 配置 MAC 保活、ARP/ND 探测和 ARP 抑制；按后端能力落实 |
+| FRR BGP / EVPN | 基础 BGP、邻居、EVPN 地址族、RD/RT、VRF-VNI 关联等配置与查询 |
+| 网络感知 | 采集并报告 EVPN Type-2/Type-3、接口、FDB、邻居和执行状态 |
+
+这张表定义目标接口范围。当前已交付 Linux 和 FRR 后端，具体操作以 [操作目录](docs/operations.md) 为准；VPP、交换机、静态 MAC、主动 ARP/ND 保活等仍待扩展。不支持的操作必须明确返回能力错误。
+
+### 3.3 当前实现的分层架构
+
+以下各层都是同一个 `sdn-agent` Go 进程内的逻辑分层。Controller 是远端管理方，Linux 内核和 FRR 是实际执行目标；存储贯穿各层，不参与网络转发。
+
+```text
+                         sdn-controller / sdnctl
+                                      |
+                         gRPC + Protobuf + token/TLS
+                                      |
+  +------------------------------------------------------------------+
+  | L1  Management / RPC                                             |
+  | Agent Server: Begin / Stage / Commit / Abort                      |
+  |               GetTask / WatchTasks / GetState / GetCapabilities   |
+  | Agent Client: Register / Heartbeat -> Controller Server           |
+  +------------------------------------------------------------------+
+                                      |
+  +------------------------------------------------------------------+
+  | L2  Candidate / Transaction                                      |
+  | Node check / request dedup / revision check / candidate freeze    |
+  | Task receipt / persistent events / query and replay               |
+  +------------------------------------------------------------------+
+                                      |
+  +------------------------------------------------------------------+
+  | L3  Planning / Execution                                         |
+  | Explicit depends_on -> DAG -> all registered backend steps        |
+  | Serial worker: Prepare -> save Undo -> Apply -> Verify            |
+  | Success: publish Running; failure/recovery: reverse rollback      |
+  +------------------------------------------------------------------+
+                                      |
+  +------------------------------------------------------------------+
+  | L4  Backend Registry / Driver                                    |
+  | op -> []Driver; Validate / Prepare / Apply / Verify / Rollback     |
+  | Observe is called by GetState; drivers are in-process Go objects  |
+  +------------------------------------------------------------------+
+                   |                                  |
+           Linux Driver                         FRR Driver
+           ip / sysctl                     vtysh / frr-reload.py
+                   |                                  |
+              Linux kernel                         FRR daemons
+
+  Shared persistence: Store interface -> Redis OR local File store
+  Candidate | Running | Operational | Task / Undo / Events / Receipts
+  Process lifecycle: identity.json / local lock / INIT-RUNNING-DOWN
+```
+
+这里的规划输入是 Controller 已经生成的操作及依赖，不是完整资源配置的自动 diff。Running 当前保存成功提交的操作日志及 revision，不是已经归一化的资源快照。`Driver` 通过启动代码注册，没有远程 Adapter 连接管理或独立的 SAI 服务进程；周期 Reconciler、事件型 Service Adapter 和主动邻居维护也尚未实现。
+
+### 3.4 当前实现的内部架构与代码映射
+
+```text
+                         cmd/sdn-agent
+              identity + lock + startup + shutdown
+                     |                    |
+                     |                    +--> ControllerClient
+                     |                         Register / Heartbeat
+                     v
+              transport + Agent gRPC Server
+                     |
+      +--------------+----------------------+------------------+
+      |              |                      |                  |
+  Begin/Stage     Commit                GetTask/WatchTasks   GetState
+      |              |                      |                  |
+      v              v                      v                  v
+  Candidate      Task + frozen          persisted          Registry.Observe
+      |          Candidate + event      task/events            |
+      |              |                                         v
+      +--> Plan <----+                                   Driver.Observe
+      |              |                                         |
+      |           wake worker                           Linux / FRR
+      |              |                                         |
+      |              v                                         v
+      |        serial execute/rollback                   Operational
+      |              |
+      |         Registry.Driver(backend_id)
+      |              |
+      |        Prepare / Apply / Verify / Rollback
+      |              |
+      |         Linux / FRR drivers
+      |              |
+      +--------------+--------------------> Store
+                     |                      Redis / File
+             success publishes Running
+```
+
+图中 Store 是共享持久化接口：Candidate、Task、Running 和 Operational 都通过它读写；不是把每类记录部署成一个独立 Redis 服务。启动后 Worker 扫描持久化任务恢复执行或补偿，见 9.6.7。
+
+| 当前职责 | 代码入口 | 实现边界 |
+| --- | --- | --- |
+| 进程装配、身份、注册与心跳 | [cmd/sdn-agent/main.go](cmd/sdn-agent/main.go) | 本地身份文件与进程锁；注册携带能力；心跳更新管理状态 |
+| gRPC 鉴权与传输 | [internal/transport/transport.go](internal/transport/transport.go)、[agent.proto](api/agent/v1/agent.proto) | 静态协议；token 与 TLS/实验用 insecure 参数 |
+| 候选、任务、执行、查询与恢复 | [internal/agent/agent.go](internal/agent/agent.go) | RPC 与单个后台 Worker；任务订阅读取持久化事件 |
+| 操作依赖与持久化记录模型 | [internal/model/model.go](internal/model/model.go) | 操作 DAG、步骤、Undo、Candidate、Running 操作日志 |
+| 后端注册、计划展开与能力 | [internal/backend/backend.go](internal/backend/backend.go) | `op -> []Driver`；调用全部注册实现；不动态加载远程客户端 |
+| Linux 执行及回读 | [internal/adapters/linux/linux.go](internal/adapters/linux/linux.go) | VRF、bridge、VXLAN、接口、地址、静态路由等 |
+| FRR 执行及回读 | [internal/adapters/frr/frr.go](internal/adapters/frr/frr.go) | OSPF/BGP/EVPN；配置校验与专用 FRR 实例快照回滚 |
+| 本地持久化 | [internal/store/store.go](internal/store/store.go) | Redis 同库键空间或 File；原子保存任务、事件和成功 Running |
+| 开发用 Controller | [internal/controller/controller.go](internal/controller/controller.go) | Register/Heartbeat 模拟实现，不是独立 `sdn-controller` 项目 |
+
+当前 `GetState` 按请求采集后端，随后保存 Operational；没有独立周期采集线程，也没有标准化拓扑聚合。能力来自 Driver 的静态操作列表，尚未交换动态 schema 或完整参数限制。注册、能力与心跳的实际调用方向见 9.6.5；状态读取路径见 9.6.6。
+
+## 4. 节点身份与三态管理
+
+### 4.1 身份字段与首次注册
+
+| 标识 | 含义 | 生命周期 |
+| --- | --- | --- |
+| `node_id` | Controller 确认的节点永久 UUID | 正常重启、名称和地址变化时保持不变 |
+| `registration_id` | 首次注册流程的幂等标识 | 首次注册重试时保持不变 |
+| `instance_id` | 当前 Agent 运行实例 | 每次 Agent 启动重新生成 |
+| `node_name` | 展示名称 | 可以修改，不作为永久身份 |
+| `backend_id` | 节点内的稳定后端实例标识 | 后端重连时保持不变 |
+| `client_id` | 当前后端连接实例标识 | 连接重建时可以变化 |
+
+首次注册流程：
+
+1. Agent 生成候选 UUID 和 registration_id，保存到本节点独立的持久化目录。
+2. Agent 使用注册凭据向 Controller 申请登记。
+3. Controller 原子检查并登记身份。候选 node_id 冲突时，生成新 UUID 并再次检查占用。
+4. Controller 保存 registration_id 与最终 node_id 的映射，重复注册请求返回相同结果。
+5. Agent 持久化最终 node_id 和身份信息，后续管理消息使用最终身份。
+
+已登记节点重连需要验证原身份，不因为冲突就自动换 UUID。容器公共镜像不能内置一个供所有节点共用的身份文件。UUID 是标识，认证凭据及其与 node_id 的绑定需要另行校验。
+
+### 4.2 节点状态
+
+以下是目标语义；当前代码以 Heartbeat 成功进入 `RUNNING`，Register 成功并不单独触发该迁移，独立运行模式除外。具体时序与身份校验边界见 9.6.5。
+
+```text
+INIT --身份确认、能力协商成功--> RUNNING
+RUNNING --管理会话失效或保活超时--> DOWN
+DOWN --重连并重新确认身份、能力--> RUNNING
+```
+
+- Agent 进程启动时进入 INIT，节点身份仍从持久化存储恢复。
+- RUNNING 表示管理关系建立，不表示所有事务都已成功。
+- DOWN 表示管理连接不可用，不触发删除 Running、清空转发表或停止 FRR。
+- Controller 和 Agent 根据各自观测维护状态，网络分区时不要求双方瞬时一致。
+- 两个方向的 gRPC 通道属于同一管理关系。建议任一必要方向持续不可用或会话心跳超时即判定 DOWN；具体超时和探测规则待定。
+- 节点状态字段使用 `node_state`，已提交配置使用 `running_config`，避免混淆。
+- 任务执行与回滚状态独立记录，不扩展节点的三态模型。
+
+## 5. gRPC、Protobuf 与能力协商
+
+### 5.1 双向 Client / Server
+
+| 调用方向 | 接口建议 | 语义 |
+| --- | --- | --- |
+| Agent Client -> Controller Server | RegisterNode | 首次注册或恢复身份，确认协议版本及服务地址 |
+| Agent Client -> Controller Server | ReportCapabilities | 上报 op、消息模型版本、功能和限制 |
+| Agent Client -> Controller Server | Heartbeat / ReportState | 上报节点健康、状态快照和增量 |
+| Controller Client -> Agent Server | BeginTransaction | 建立带基础版本的候选事务 |
+| Controller Client -> Agent Server | StageOperations | 向该事务添加或修改配置操作 |
+| Controller Client -> Agent Server | Commit | 冻结候选配置并提交执行任务，返回 task_id |
+| Controller Client -> Agent Server | AbortTransaction | 放弃尚未提交的候选事务 |
+| Controller Client -> Agent Server | GetTask / WatchTasks | 查询结果，或通过服务端流订阅任务变化 |
+| Controller Client -> Agent Server | GetOperational / GetRunning | 查询实际状态或已提交配置 |
+
+双方分别维护 gRPC Server 和 Client，提供可达地址并验证身份。gRPC 采用 HTTP/2，消息采用 Protobuf；建议启用 TLS，节点认证与证书或其他凭据的具体引导流程待定。
+
+已提交事务不能通过 AbortTransaction 当作普通候选配置直接删除。第一版不默认提供任意阶段的任务取消；如增加取消接口，必须经过事务恢复流程。
+
+### 5.2 公共消息与操作模型
+
+建议公共消息携带 `protocol_version`、`message_id`、`correlation_id`、`node_id`、`instance_id` 和具体业务消息。首次注册尚无最终身份时，node_id 可以为空，候选 ID 放在注册参数中。
+
+关键标识分别承担不同职责：
+
+- `request_id`：一次业务请求的稳定幂等键，重试时不变。
+- `transaction_id`：候选配置事务的标识，关联多次 StageOperations 和一次有效提交。
+- `task_id`：commit 后后台执行任务的标识，用于订阅、查询和恢复。
+- `op_id`：事务内某次具体操作的标识，同一个 op_code 可以出现多次。
+- `step_id`：执行计划中的具体后端步骤标识。
+
+建议 Operation 的逻辑结构为：
+
+```text
+Operation
+  op_id
+  op_code
+  schema_version
+  resource_id
+  depends_on[]
+  data
+```
+
+op、请求参数、结果和公共错误码通过版本化 `.proto` 定义。建议使用统一操作外层加具体类型的 Protobuf 参数，插件扩展容器可采用 `google.protobuf.Any`；Agent 必须验证 op_code、消息类型和版本是否匹配。
+
+Any 只提供类型标识和编码内容，不自动安装 schema 或业务处理器。Controller 和对应 Adapter 仍需要兼容的消息定义及实现。未知 op 或不支持的语义在执行前拒绝，不能静默忽略。字段编号、操作编号、错误码须保持稳定，废弃编号不复用。
+
+### 5.3 能力与错误
+
+| 内容 | 定义位置 |
+| --- | --- |
+| op 含义、data 格式、公共错误码 | 共享的版本化协议模型 |
+| 本节点各后端支持哪些 op 和模型版本 | Agent 能力报告 |
+| IPv6、ARP 抑制、批量大小、资源限制等 | op / 后端能力属性 |
+| 校验、回读、幂等、回滚支持情况 | 后端操作生命周期能力 |
+| 后端当前是否在线、可用 | Operational 状态 |
+
+一个后端不必实现全部 op。对已注册的某个 op，全部注册实现都参与执行；对外可用能力还需要满足这些实现的参数约束和事务要求，不能简单取能力并集。能力变化后重新上报，已经受理的事务使用其冻结的参与集合。
+
+建议公共错误至少区分 INVALID_ARGUMENT、UNSUPPORTED_OPERATION、UNSUPPORTED_SCHEMA、REVISION_CONFLICT、DEPENDENCY_ERROR、BACKEND_UNAVAILABLE、ROLLBACK_UNSUPPORTED、APPLY_FAILED、VERIFY_FAILED、RESULT_UNKNOWN 和 ROLLBACK_FAILED。正式编号及完整错误目录后续在 `.proto` 中定义。
+
+错误结果包含公共错误码、后端原始错误码、backend_id、op_id、step_id、描述、是否可重试、是否部分生效，以及回滚结果。gRPC 调用状态与后台任务结果分别表达；RPC 超时不能直接解释为配置未执行。
+
+## 6. 本地数据库与持久化记录
+
+| 存储 | 内容 | 主要写入方 |
+| --- | --- | --- |
+| Candidate DB | 按 transaction_id 隔离的候选配置；基础 Running 版本、修改集、操作归属和冻结信息 | Candidate Manager |
+| Running DB | 最后成功提交的配置基线、版本及资源归属 | Transaction Manager 在提交完成时写入 |
+| Operational DB | 实际配置对象、接口/FDB/邻居、学习信息、后端连接、健康状态及配置偏差 | Local Observers、Service Adapters、执行模块 |
+| Task Store | 持久化任务、请求去重、计划、参与后端、步骤结果、原配置和回滚信息、事件序号 | Transaction / Task Manager |
+
+前三项是三类逻辑数据库，Task Store 是额外的持久化记录空间，可以放在同一 Redis 实例的独立键空间中，无需新增数据库服务。具体使用逻辑 DB 还是键前缀在实现时确定。
+
+Candidate 保存规范化的候选资源模型或基于明确版本的修改集，不能只把原始 RPC 入库后直接与 Running 做字符串比较。不同事务不能修改同一份无归属的 Candidate。
+
+学习信息建议在 Operational 中按来源隔离，并保留 node_id、网络上下文、来源、时间、序号、增加/删除语义和新鲜度。事务回滚不恢复或覆盖动态学习的 MAC、邻居和路由历史。
+
+Running 记录已提交基线；Operational 记录实际状态。执行或回滚途中两者可能存在差异，必须如实呈现，不得用 Running 未变化来证明后端没有变化。
+
+Task 与冻结的 Candidate 在返回 commit 已受理前必须可靠保存，定义一致写入和重启恢复规则。Redis 持久化策略必须与受理承诺匹配，不能只依赖内存写入或 Pub/Sub。
+
+最终任务结果和 Running 新版本需要一致发布，或通过持久化日志保证崩溃后可恢复。活动事务、去重记录及恢复所需信息不能提前过期；完成后的保留时间另行配置。
+
+配置下发核对 Candidate 与 Running；本地恢复还需要核对 Running 与 Operational，否则后端重启丢失对象时可能无法发现。恢复操作只处理本项目拥有的资源，并避开正在提交或尚未恢复完成的事务。
+
+## 7. Backend Adapter 与 op 注册
+
+### 7.1 注册和连接
+
+```text
+op_code -> [
+  op_obj {
+    backend_id, client_id, schema_version, capabilities,
+    dependencies,
+    validate, prepare, apply, verify, rollback
+  },
+  ...
+]
+```
+
+Client Manager 通过配置文件或 CLI 接入后端并维护连接，Registry 管理后端提供的操作实现。`backend_id` 表示稳定后端身份，`client_id` 表示本次连接；不能用易变 socket 身份替代稳定的资源归属。
+
+同一个 op 的所有注册实现全部参与。commit 时固定本次参与集合及注册版本，后续后端加入不改变正在执行的事务。后端断线应保留其登记并标记不可用，不能通过移除登记将其静默排除。缺少实现或必需后端不可用时，不能把配置当作成功的空操作。
+
+callback 是 Agent 内的函数或 RPC 代理，不跨网络传递函数对象。独立后端进程通过接口暴露操作，Agent 中的代理负责转换并发送；Linux、VPP、FRR 等原生接口由具体 Driver 适配。
+
+### 7.2 生命周期接口
+
+| 接口 | 职责 |
+| --- | --- |
+| validate | 检查参数、依赖、消息版本、后端能力和资源限制 |
+| prepare | 查询原配置、生成持久化恢复信息；如需预留资源，预留必须可撤销 |
+| apply | 执行配置，并返回能关联到具体步骤的结果 |
+| verify | 查询或等待后端确认配置已落实 |
+| rollback | 恢复本事务修改前的配置，并核对恢复结果 |
+
+调用上下文应包含 transaction_id、task_id、op_id、step_id、backend_id、幂等标识及资源身份。具体签名后续定义。
+
+同步接口返回 0 可以表示该步骤执行完成；如果后端仅受理请求，应返回 PENDING 并提供查询或通知机制，不能直接当作成功提交。后端调用超时应记录结果不确定并回读，不能盲目重复 apply。
+
+所有参与配置事务的实现必须支持所需的恢复和核对能力。无法提供回滚保证的 op 应在执行前拒绝进入本类事务，不静默降级成尽力执行。
+
+这里的 SAI 指项目内部统一操作抽象。交换机 Driver 可对接 OCP SAI 或厂商 SDK。FRR 是控制面组件，其配置接口可以使用同一执行抽象；FRR 配置 Driver 与 FRR 状态采集 Adapter 分别承担配置和观测。
+
+## 8. 依赖计划与执行顺序
+
+建议使用有向无环图 DAG。依赖来自资源模型、操作显式依赖和 Adapter 声明，不能使用 callback 的注册先后代替业务依赖。
+
+两类依赖需要同时表达：
+
+- 操作之间：例如先创建 BD，再添加 BD 成员。
+- 同一操作的后端之间：例如先建立底层对象，再执行依赖该对象的 FRR 配置。
+
+```text
+A --------+
+          |
+          v
+          C -----> D
+          ^
+          |
+B --------+
+```
+
+A、B 必须完成后才能执行 C，C 完成后才能执行 D。第一版拓扑排序后串行执行，例如 A、B、C、D；后续是否并行另行决定。
+
+每个步骤使用独立 step_id，关联 transaction_id、op_id、backend_id、资源和执行阶段。同一个 op_code 处理多个资源时必须展开成不同的实例。跨步骤需要的后端对象标识也纳入执行记录。
+
+执行前检查：
+
+1. 参数和基础配置版本是否匹配。
+2. 全部注册实现是否完整、可用并满足事务能力要求。
+3. 依赖是否存在，是否存在循环或互相冲突的资源修改。
+4. 计划中的执行顺序及回滚路径是否明确。
+
+计划、参与集合和恢复所需信息持久保存。删除类操作需要按资源生命周期建立依赖，不能直接沿用创建顺序。回滚依据已完成步骤的依赖逆序执行，并处理失败步骤可能产生的部分修改。
+
+## 9. commit、回滚与任务恢复
+
+### 9.1 客户端交互
+
+```text
+BeginTransaction(base_revision) -> transaction_id
+       |
+StageOperations(transaction_id, operations)  [可多次]
+       |
+Candidate: 暂存配置，不修改后端
+       |
+Commit(transaction_id, request_id) -> task_id / ACCEPTED
+       |
+WatchTasks(task_id, after_sequence) / GetTask(task_id)
+```
+
+一次事务可以包含一个或多个配置 op，全部相关后端参与同一次单节点提交。Controller 负责跨节点的任务编排和结果汇总，但单节点成功不代表整个网络的多节点任务已完成。
+
+查询、注册和心跳不属于配置提交。动态控制面信息遵循独立的所有权与转发表集成路径，不能因用户配置事务回滚而被整体恢复成旧快照。其他非配置动作的具体接口边界后续定义。
+
+### 9.2 服务端处理
+
+1. 校验身份、请求格式和事务归属，进行请求去重；冻结本次 Candidate、参与后端集合及注册版本。
+2. 一致保存任务、冻结的候选版本、参与集合和恢复所需入口信息，再返回 task_id 与 ACCEPTED。
+3. 获取本节点配置提交锁，并再次检查 base_revision 是否仍与 Running 一致；不一致时拒绝执行，不自动覆盖新配置。
+4. 生成计划，检查全部后端、依赖和可回滚性；执行 validate / prepare，保存原配置和撤销信息。
+5. 按 DAG 顺序执行，调用前记录步骤意图，调用后记录结果，核对后端实际状态。
+6. 全部步骤执行并验证成功后，发布 Running 新版本和成功结果。
+7. 任一步骤失败，停止后续 apply，核对该步骤是否已产生部分效果，按依赖逆序回滚已产生的修改。
+8. 核对恢复结果，保存最终任务结果及 Operational；清理策略不能删除仍用于恢复的信息。
+
+第一版同一节点配置提交串行执行。可以保留多个隔离的候选事务，但后提交者必须通过版本检查，不能用旧 Candidate 覆盖新 Running。
+
+预检查需要结合 Candidate 和计划中的待创建资源判断依赖，不能要求所有未来依赖已经存在于后端；实际 apply 前再确认前置步骤已经完成。
+
+如果 preflight 或 prepare 失败，也需要释放已经产生的预留资源。未对配置产生修改的失败不必调用不存在的配置撤销步骤，但仍要记录任务和清理结果。
+
+### 9.3 回滚语义
+
+- 新建对象：仅撤销本事务实际创建的对象；事前已经存在的对象不能被误删。
+- 修改对象：恢复修改前的属性和关联。
+- 删除对象：保存足以重建受管配置的信息，并按恢复依赖重新创建。
+- 回滚范围只覆盖本事务拥有的配置，不恢复无关人工配置、动态学习状态或整个后端数据库快照。
+- 返回错误或调用超时的步骤也可能已经部分生效，需要先检查后端，不能只撤销明确返回成功的步骤。
+- 操作和回滚需要幂等，确保进程崩溃后能够继续核对和恢复。
+
+这种方案是多后端补偿事务：执行过程中可能短暂部分生效，回滚恢复配置也不等于恢复期间丢失的业务报文。若要求转发面中间状态不可见，必须由后端提供预配置和原子激活能力，单靠 Agent 顺序调用无法保证。
+
+回滚自身可能失败。此时 Running 仍保留上一个提交基线，Operational 记录实际偏差；保留任务、恢复信息并阻止受影响资源上的冲突变更，不能声称后端已经恢复。
+
+### 9.4 任务状态与查询
+
+任务状态与节点三态独立。建议的任务状态包括：
+
+| 状态 | 含义 |
+| --- | --- |
+| ACCEPTED | commit 已持久受理，等待执行 |
+| VALIDATING | 核对版本、能力、依赖和恢复信息 |
+| APPLYING / VERIFYING | 正在执行或确认后端结果 |
+| RECOVERING | 重启或结果不确定后，正在核对与恢复 |
+| ROLLING_BACK | 正在撤销已产生的修改 |
+| SUCCEEDED | 全部相关后端已验证，Running 已提交 |
+| FAILED_NO_CHANGE | 提交失败，确认没有遗留配置修改 |
+| FAILED_ROLLED_BACK | 提交失败，已确认恢复原配置 |
+| ROLLBACK_FAILED | 提交失败且恢复未完成，保留恢复记录和资源保护 |
+
+GetTask 返回最终或当前状态、配置版本、逐后端结果、错误、回滚结果及最后事件序号。WatchTasks 可按序号恢复；历史过期后的快照与重新同步机制属于目标设计，当前尚未实现事件过期清理，持久事件缺失时返回读取错误。
+
+通知来自持久化任务记录，不依赖一次性 Pub/Sub 投递。结果查询是可靠获取当前结果的入口，订阅用于及时通知。
+
+### 9.5 幂等、崩溃与断连
+
+- 相同 request_id 和相同请求返回原 task_id；相同 ID 携带不同内容返回冲突。
+- 对已冻结事务重复 commit 不重新执行；返回已有任务或明确的事务状态。
+- commit 响应丢失时，Controller 使用同一 request_id 重试或按 transaction_id 查询。
+- Task Manager 拥有后台任务生命周期，提交 RPC 结束、超时或管理连接断开不取消已经持久受理的任务。
+- Controller 断连后继续执行已受理事务；执行失败才回滚。重连后通过 task_id 查询或按事件序号补报。
+- 未 commit 的候选事务不产生后端配置，其断连后的保留期限和过期清理另行配置。
+- 当前 Agent 重启后扫描持久化任务：`ACCEPTED` 重新检查 revision 后执行；其余非终态任务进入逆序补偿，依据 `Started`、`Restored` 和 Undo 恢复已开始的步骤，不盲目重放全部命令。
+- 即使后端已经完成、但 Running 与成功任务尚未原子发布，当前实现也采用补偿策略；“重新验证后补发成功版本”属于后续可选恢复策略，尚未实现。
+- 当前 Worker 在节点内串行执行；持久化记录中存在 `ROLLBACK_FAILED` 时阻止该节点后续任务。可通过 RetryRollback 重试并验证 Undo；尚无按资源细分的恢复锁，也没有直接强制解锁接口。
+
+节点身份恢复与事务恢复分别处理：重新协商进入 RUNNING 不自动把遗留任务标记为成功。
+
+### 9.6 当前 Go 实现的请求时序
+
+本节描述当前 Go 代码的实际调用流程：9.6.1～9.6.4 是配置提交、执行、回滚和结果读取；9.6.5～9.6.7 补充启动注册、状态采集和重启恢复。图中的 Redis 也可以替换为同一 Store 接口下的 File 存储。
+
+配置流程以创建租户 `TENANT-A` 为例，假设 Controller 已完成身份协商，并已获得 `node_id` 和当前配置版本 `revision`。
+
+同一个 op 会展开成两个执行步骤：
+
+```text
+TENANT / CREATE
+    |
+    +-- 1. Linux Driver：创建内核 VRF
+    |
+    +-- 2. FRR Driver：创建 FRR VRF 配置
+```
+
+#### 9.6.1 创建候选、暂存配置与提交
+
+```text
+ Controller           Agent RPC             Registry                Redis
+     |                    |                     |                      |
+     |-- Begin ---------->|                     |                      |
+     |   node_id          |-- 读取 Running.revision ------------------->|
+     |   base_revision    |<-------------------------------------------|
+     |   request_id       | 校验身份、版本、幂等键                       |
+     |                    |-- 保存 Candidate + 幂等记录 --------------->|
+     |<-- transaction_id -|                     |                      |
+     |                    |                     |                      |
+     |-- Stage ---------->|                     |                      |
+     |   transaction_id   |-- Plan(ops) -------->|                      |
+     |   operations[]     |                     | 检查依赖、拓扑排序    |
+     |                    |                     | 查找全部注册 Driver  |
+     |                    |                     | 调用 Driver.Validate |
+     |                    |<-- 校验结果 --------|                      |
+     |                    |-- 保存 Candidate ------------------------->|
+     |<-- 暂存成功 -------|                     |                      |
+     |                    |                     |                      |
+     |-- Commit --------->|                     |                      |
+     |   transaction_id   |-- 再次 Plan -------->|                      |
+     |   request_id       |<-- 执行计划 --------|                      |
+     |                    | 再次检查 Running.revision                   |
+     |                    |                     |                      |
+     |                    |-- 原子保存 ------------------------------->|
+     |                    |   冻结 Candidate                           |
+     |                    |   Task + 执行计划 + ACCEPTED 事件           |
+     |                    |   Commit 幂等记录                          |
+     |                    |<-- 持久化成功 -----------------------------|
+     |                    |                     |                      |
+     |                    | 唤醒后台 Worker                            |
+     |<-- task_id --------|                     |                      |
+     |    ACCEPTED        |                     |                      |
+     |                    |                     |                      |
+```
+
+Begin、Stage 不修改网络；Commit 返回 `ACCEPTED` 表示已持久化受理。后台 Worker 的执行与 Commit RPC 的返回可以并发。图中省略了部分存储读取和异常返回；身份校验实际在各 RPC 入口执行，幂等重试可能直接返回既有事务或任务。
+
+#### 9.6.2 后台执行与成功提交
+
+```text
+   Worker                 Redis                Driver             Linux / FRR
+      |                     |                     |                     |
+      |-- 读取 Task/Plan -->|                     |                     |
+      |<--------------------|                     |                     |
+      | 再次检查 revision                         |                     |
+      |-- 保存 APPLYING --->|                     |                     |
+      |                     |                     |                     |
+      |  按计划串行执行：先 Linux step，再 FRR step                      |
+      |                     |                     |                     |
+      |-- Prepare -------------------------------->|                     |
+      |                     |                     |-- 查询旧配置 ------>|
+      |                     |                     |<-- 当前配置 --------|
+      |<-- Undo：回滚所需的旧值/快照 ---------------|                     |
+      |                     |                     |                     |
+      |-- 持久化 Undo ----->|                     |                     |
+      |   Started=true      |                     |                     |
+      |<-- 保存成功 --------|                     |                     |
+      |                     |                     |                     |
+      |-- Apply ---------------------------------->|                     |
+      |                     |                     |-- ip / vtysh ------>|
+      |                     |                     |<-- 执行结果 --------|
+      |<-- 返回结果 -------------------------------|                     |
+      |                     |                     |                     |
+      |-- Verify --------------------------------->|                     |
+      |                     |                     |-- 回读实际配置 ---->|
+      |                     |                     |<-- 实际配置 --------|
+      |<-- 校验通过/失败 --------------------------|                     |
+      |                     |                     |                     |
+      |-- 保存步骤结果 ---->|                     |                     |
+      |   + 新事件          |                     |                     |
+      |                     |                     |                     |
+      |  重复上述流程，直到全部 step 完成                                |
+      |                     |                     |                     |
+      |-- 原子保存 -------->|                     |                     |
+      |   更新 Running      |                     |                     |
+      |   revision + 1      |                     |                     |
+      |   Task=SUCCEEDED    |                     |                     |
+      |   成功事件          |                     |                     |
+      |<-- 保存成功 --------|                     |                     |
+```
+
+每个 step 执行前，Worker 通过 `Registry.Driver(backend_id)` 找到对应 Driver。`Undo` 和 `Started=true` 在 Apply 之前持久化，保证后端已经修改、但步骤结果尚未保存时，重启恢复仍能找到补偿信息。Prepare、Apply、Verify 任一环节失败都会进入回滚；执行前发现 revision 冲突则直接记录 `FAILED_NO_CHANGE`。
+
+#### 9.6.3 失败与逆序回滚
+
+```text
+   Worker                 Redis                 Drivers
+      |                     |                      |
+      |-- ROLLING_BACK ---->|                      |
+      |                     |                      |
+      |-- Rollback(Undo) ------------------------->|
+      |   按执行计划逆序，恢复所有已开始的步骤      |
+      |                     |                      |
+      |                     |      恢复配置 + 回读确认
+      |<-- 每一步回滚结果 ------------------------|
+      |-- 保存步骤结果 ---->|                      |
+      |                     |                      |
+      |-- 保存任务终态 ---->|                      |
+      |                     |                      |
+      |   未开始修改：FAILED_NO_CHANGE             |
+      |   回滚成功：  FAILED_ROLLED_BACK           |
+      |   回滚失败：  ROLLBACK_FAILED              |
+      |                     |                      |
+      |   Running 保留旧版本                       |
+      |   ROLLBACK_FAILED 会阻止后续任务执行        |
+```
+
+发生部分修改后报错的那一步也参与回滚；尚未开始的步骤跳过，已确认恢复的步骤在恢复流程中跳过。创建租户的示例中，若 FRR step 失败，会先恢复 FRR，再恢复 Linux。当前代码以 `Started` 标志判断是否存在需要补偿的步骤。
+
+#### 9.6.4 事件订阅与结果查询
+
+```text
+ Controller              Agent RPC                  Redis
+     |                       |                         |
+     |-- WatchTasks -------->|                         |
+     |   task_id             |-- 读取持久化事件 ------>|
+     |   after_sequence      |<-- 按 sequence 返回 ----|
+     |<== gRPC 事件流 =======|                         |
+     |    ACCEPTED           |                         |
+     |    APPLYING           |                         |
+     |    步骤执行进度       |                         |
+     |    SUCCEEDED / 失败态 |                         |
+     |                       |                         |
+     |-- GetTask(task_id) -->|-- 读取 Task ----------->|
+     |<-- 当前任务结果 ------|<------------------------|
+```
+
+订阅与后台执行并行，可以在任务执行中或完成后发起。断开后使用 `after_sequence` 继续读取已持久化事件；客户端断线不会取消已受理任务。每次步骤状态更新会生成新的事件序号，事件携带任务快照。当前 `WatchTasks` 每轮读取任务和缺失事件，无新事件时等待 50 ms 后重查，终态事件发送完毕后关闭流；没有使用 Redis Pub/Sub，也未实现历史事件过期后的快照重同步协议。
+
+当前 Registry 和 Driver 都是 Agent 进程内的 Go 调用；Controller 与 Agent 之间使用 gRPC。对应代码：
+
+- [internal/agent/agent.go](internal/agent/agent.go)：Begin、Stage、Commit、Worker、执行、回滚、订阅与查询。
+- [internal/backend/backend.go](internal/backend/backend.go)：Driver 接口、op 注册映射、执行计划。
+- [internal/store/store.go](internal/store/store.go)：持久化读取与原子更新。
+- [cmd/sdnctl/main.go](cmd/sdnctl/main.go)：客户端组合调用 Begin → Stage → Commit → WatchTasks。
+
+#### 9.6.5 启动、注册与双向管理通信
+
+```text
+ Agent main/client       Identity / Store        Controller Server
+        |                       |                       |
+        |-- lock + load/create->|                       |
+        |   persist node_id + registration_id           |
+        |   create new instance_id                      |
+        |                       |                       |
+        |-- Register ---------------------------------->|
+        |   proposed_node_id / registration_id          |
+        |   instance_id / endpoint / capabilities       |
+        |<-- assigned node_id --------------------------|
+        |-- persist identity -->|                       |
+        |                       |                       |
+        |  create Store + Agent(INIT); start Worker      |
+        |  start Agent gRPC Server                      |
+        |                       |                       |
+        |-- Heartbeat(node_id, instance_id, revision) -->|
+        |<-- OK / error --------------------------------|
+        |  OK: RUNNING; error: DOWN + retry Register     |
+        |  re-register OK: wait for next heartbeat OK    |
+        |                       |                       |
+        |  Agent gRPC Server <--- Controller gRPC Client |
+        |                 Begin / Stage / Commit        |
+        |                 GetState / GetTask / WatchTasks|
+```
+
+当前首次 Register 在 Agent gRPC 服务开始监听之前，Controller 收到 endpoint 后不能立即假定 Agent 已经可调用。首次注册失败会退出；已分配身份的节点在 Controller 暂不可达时，可以使用持久化身份启动并恢复本地任务。已有身份被重新分配成其他 node_id 时会拒绝关联旧任务日志。
+
+心跳协程启动即发起一次调用，随后使用 2 秒 ticker，单次 Heartbeat 和重注册超时均为 2 秒。成功心跳设置 `RUNNING`；失败设置 `DOWN` 并尝试重新注册；重注册成功本身不将状态改回 `RUNNING`。不配置 Controller 地址的独立运行模式直接设置 `RUNNING`。管理断连不删除配置，也不取消已持久受理的任务。
+
+开发用 Controller 校验 Heartbeat 的 `node_id + instance_id`，拒绝被新实例替换的旧实例心跳；但相同 `registration_id` 再次 Register 会更新当前实例。配置 RPC 只检查目标 node_id，并经过传输鉴权，尚未携带管理会话代次；本地进程锁也仅保护同一状态目录。因此当前机制不能当作完整的跨主机实例隔离或控制器写入租约。能力随 Register 上报，Controller 也可调用 GetCapabilities 查询；尚无独立 ReportCapabilities/ReportState RPC。
+
+#### 9.6.6 查询实际状态与更新 Operational
+
+```text
+ Controller        Agent.GetState          Registry / Drivers       Store
+     |                   |                         |                   |
+     |-- GetState ------>|                         |                   |
+     |   node_id         |-- load Running ---------------------------->|
+     |                   |<-- revision + operation log ----------------|
+     |                   | read node_state / instance_id               |
+     |                   |                         |                   |
+     |                   |-- Observe ------------->|                   |
+     |                   |                         | query Linux / FRR |
+     |                   |<-- observations/errors --|                   |
+     |                   |                         |                   |
+     |                   |-- save operational snapshot --------------->|
+     |                   |<-- result ----------------------------------|
+     |<-- State ---------|                         |                   |
+     | running_json / observations / observation_error                 |
+```
+
+本流程在每次 GetState 请求中同步执行，不是读取一个持续更新的缓存。`observations` 使用后端前缀区分原始查询结果；采集失败可返回部分结果及 `observation_error`，保存 Operational 失败也通过该字段报告。读取 Running 本身失败则返回 RPC 错误。Running 和各后端依次读取，不构成跨后端的原子时点快照；调用方应结合任务状态判断正在变更的节点。
+
+当前没有独立周期 Observer、FPM/ZAPI 事件接入或由 Operational 自动生成配置的 Reconciler。后续增加这些组件时，应保持“已提交配置、真实观测和任务结果”三者的边界。
+
+#### 9.6.7 进程重启与持久化任务恢复
+
+```text
+ Agent startup          Worker                  Store              Drivers
+       |                   |                       |                    |
+       |-- Start --------->|-- scan task/* ------->|                    |
+       |                   |<-- records + plans ---|                    |
+       |                   |                       |                    |
+       |                   | any ROLLBACK_FAILED?  |                    |
+       |                   |   yes: block this node's task execution    |
+       |                   |                       |                    |
+       |                   | sort unfinished tasks by creation time     |
+       |                   |                       |                    |
+       |                   | ACCEPTED: recheck revision -> execute      |
+       |                   |   mismatch -> FAILED_NO_CHANGE             |
+       |                   |                       |                    |
+       |                   | other unfinished state:                   |
+       |                   |-- persist ROLLING_BACK>|                    |
+       |                   |-- reverse Rollback(saved Undo) ----------->|
+       |                   |   only Started && !Restored steps          |
+       |                   |<-- restore + verification result ----------|
+       |                   |-- save step/event --->|                    |
+       |                   |-- save terminal state>|                    |
+       |                   |   Running stays at previous committed rev  |
+```
+
+Worker 在启动唤醒、Commit 唤醒或 1 秒定时扫描时读取任务记录，恢复逻辑复用 9.6.3 的补偿实现。已经原子发布 `SUCCEEDED + Running` 的任务是终态，不再次执行；未完成发布的任务即使最后一个后端步骤已经成功，也仍按未完成事务补偿。回滚过程中再次重启时，已持久记录 `Restored` 的步骤跳过，其余已开始步骤继续恢复。`ROLLBACK_FAILED` 不自动转成成功，也不会因 Controller 重连而解除阻塞。
+
+## 10. Controller etcd 与全局信息
+
+etcd 在本设计中用于全局配置和分布式协调。建议第一版只在 Controller 侧部署 etcd，Agent 通过 gRPC 同步本节点所需信息并保存在 Redis。Agent 是否需要独立 etcd 暂不作为必需组件。
+
+需要全局维护的信息包括：
+
+| 信息 | 用途 |
+| --- | --- |
+| 节点身份、注册映射、能力、服务地址 | 唯一登记、接管和连接管理 |
+| 租户、网络、节点部署关系 | 规划跨节点网络 |
+| VNI、地址、RT 等资源分配与约束 | 避免冲突并保持跨节点策略一致 |
+| 全网配置与各节点目标版本 | 跟踪期望配置和部署进度 |
+| 跨节点任务、依赖与完成结果 | 协调单节点事务组成的全网变更 |
+| Controller 管理权和接管代次 | 多 Controller 场景下拒绝旧管理者写入 |
+
+etcd 采用集群选举和多数派提交。不能把 Controller 固定视为 etcd 主库、每个 Agent 视为普通从库；独立 etcd 集群也不会自动形成这种主从同步关系。
+
+高频 MAC、邻居和原始观测先在本地处理，Controller 按需建立拓扑索引，不要求逐条写入 etcd。全局配置同步、协议路由交换和观测汇总是不同的数据路径。
+
+## 11. FRR、FPM 与数据面边界
+
+推荐的职责链路：
+
+```text
+配置：Controller -> Agent -> FRR 配置 Adapter / 数据面 Adapter
+路由：Leaf FRR <-> Spine RR <-> Leaf FRR
+观测：FRR / 数据面 -> Agent -> Controller 拓扑服务
+```
+
+- FRR 负责 BGP EVPN 路由交换、选路和撤销。
+- FPM 是 Zebra 转发信息导出接口，不等同于 ZAPI，也不能直接当作完整 EVPN NLRI 数据源。
+- 获取 Type-2、Type-3 需要独立的 FRR EVPN 采集能力；具体接口及增量方式按目标 FRR 版本验证。
+- FPM 监听、主动查询和其他订阅方式可以并存，Service Adapter 不强制采用同一种连接方向。
+- 同一后端、同一类资源必须明确写入负责人。Linux 中由 FRR 管理的动态路由，不由 Agent 再从拓扑视图重复安装。
+- VPP 和交换机后端需要单独确定动态路由编程与本地学习事件反馈路径；统一配置 Adapter 本身不等于完成 FRR 与该后端的路由集成。
+- 远端 EVPN 安装的 MAC/邻居不能被当成本地新学习的主机再次通告。
+- 默认只探测本节点直接接入且属于已授权策略范围的主机，不由每个 Leaf 周期性探测全网远端主机。
+
+## 12. 网络拓扑的含义
+
+| 视图 | 需要的信息 | 可表达的关系 |
+| --- | --- | --- |
+| 配置视图 | Controller 期望配置 | 租户、网络、节点部署和预期成员 |
+| 物理拓扑 | LLDP、接口、设备身份与配置 | Leaf/Spine 的端口连接及状态 |
+| Overlay 拓扑 | EVPN 路由及本地 VRF/VNI/RT 映射 | 已观测的 VTEP、网络成员和路由可达关系 |
+| 主机位置 | Type-2、FDB、ARP/ND、接入口信息 | MAC/IP、所属网络、本地接入口或远端 VTEP |
+| 执行状态 | 后端实际对象和配置执行结果 | 哪些网络对象已经在节点落实 |
+
+Type-2 的 IP 信息可能缺失，未被学习或通告的静默主机也不会自动出现在路由视图中。Type-3 可以提供参与某个二层网络的 VTEP 信息，不能据此还原 Leaf 到 Spine 的物理布线。
+
+关联数据时需要使用网络上下文和显式映射，不能把 RD 直接当租户标识，也不能假设 RT 后缀始终等于 VNI。拓扑记录应保留来源、新鲜度和不完整状态。
+
+## 13. 尚待确定的实现项
+
+以下事项不影响已确认的单节点事务范围、全后端依赖执行、显式 commit、失败回滚、断连继续和节点三态：
+
+- Linux/FRR 已实现后继续扩展哪些后端，以及新增操作如何保存原值、验证和回滚。
+- 当前静态 `.proto` 的版本兼容规则、完整错误目录和未来 Any 类型注册方式。
+- 在已实现 `depends_on` 和 Driver 生命周期接口之上，扩展步骤输出引用、自动资源依赖及验证标准。
+- 在已实现 Redis/File 持久化与任务补偿恢复之上，确定候选事务、事件和最终任务记录的保留期限。
+- 注册凭据、节点证书与身份绑定方式；gRPC 地址发现和管理会话超时参数。
+- 未提交事务过期策略，以及其他非配置动作和未来任务取消接口的语义。
+- 本地人工配置冲突处理；Running 与 Operational 偏差的自动修复边界。
+- Type-2/Type-3 采集接口、首版是否同时实现物理拓扑采集，以及动态转发表的写入归属。
+- Spine 使用远程设备管理 Adapter，还是后续增加 `role=spine` 的 Agent。
+- Python 的实际使用范围；统一 SAI 是否需要映射 OCP SAI；SVI/BVI 等具体 API 命名。
+- Agent 本地是否存在需要独立 etcd 的场景，目前建议不引入。
+
+## 14. 参考资料
+
+- [OVN Architecture](https://www.ovn.org/support/dist-docs/ovn-architecture.7.html)：集中逻辑配置转换、本地执行，以及配置进度确认。
+- [OpenDaylight Controller Developer Guide](https://docs.opendaylight.org/projects/controller/en/latest/dev-guide.html)：配置状态与运行状态的模型划分。
+- [SONiC Architecture](https://github.com/sonic-net/SONiC/wiki/Architecture)：设备内部 Redis、SWSS、Orchagent 与适配层协作。
+- [FRR EVPN](https://docs.frrouting.org/en/latest/evpn.html)：EVPN、VRF、VNI 与路由目标等概念。
+- [FRR Zebra FIB Push / FPM](https://docs.frrouting.org/en/latest/zebra.html#zebra-fib-push-interface)：转发信息导出和 FPM 接口。
+- [gRPC Core Concepts](https://grpc.io/docs/what-is-grpc/core-concepts/)：服务、消息模型、请求响应和流式接口。
+- [gRPC Retry](https://grpc.io/docs/guides/retry/)：调用重试与业务幂等的边界。
+- [Protobuf Language Guide](https://protobuf.dev/programming-guides/proto3/)：消息定义、字段演进和 Any。
+- [NETCONF RFC 6241](https://www.rfc-editor.org/rfc/rfc6241.html#section-8.3)：Candidate 与 commit 语义。
+- [NMDA RFC 8342](https://www.rfc-editor.org/rfc/rfc8342.html#section-5.3)：实际应用配置与 Operational 状态。
+- [etcd FAQ](https://etcd.io/docs/v3.6/faq/)：集群选举、复制和多数派提交。
+- [Redis Pub/Sub](https://redis.io/docs/latest/develop/pubsub/#delivery-semantics)：订阅断连时的消息交付限制。
+
+上述资料用于参考职责和语义。本文的 Protobuf 操作、单节点多后端补偿事务、数据库分工及组件接口属于本项目设计，不表示已经实现 NETCONF 协议或满足所有后端的原子提交能力。

@@ -1,0 +1,107 @@
+syntax = "proto3";
+package sdn.agent.v1;
+option go_package = "sdn-agent/api/agent/v1;agentv1";
+import "google/protobuf/struct.proto";
+
+enum Action { ACTION_UNSPECIFIED=0; CREATE=1; SET=2; DELETE=3; BIND=4; UNBIND=5; }
+enum OpCode {
+ OP_UNSPECIFIED=0;
+ NODE_NETWORK=1; INTERFACE=2; ADDRESS=3; TENANT=4; BD=5;
+ BD_PORT=6; BD_TENANT=7; VXLAN=8; STATIC_ROUTE=9;
+ OSPF_INSTANCE=20; OSPF_NETWORK=21; OSPF_INTERFACE=22;
+ OSPF6_INSTANCE=23; OSPF6_INTERFACE=24;
+ BGP_INSTANCE=30; BGP_PEER_GROUP=31; BGP_NEIGHBOR=32;
+ BGP_EVPN_PEER=33; BGP_EVPN_GLOBAL=34;
+ EVPN_L2VNI=35; EVPN_TENANT=36; TENANT_L3VNI=37;
+ BGP_AF_PEER=38; BGP_NETWORK=39; BGP_REDISTRIBUTE=40; EVPN_TYPE5=41;
+}
+enum AddressFamily { AF_UNSPECIFIED=0; IPV4=1; IPV6=2; L2VPN_EVPN=3; }
+message Sysctl { string key=1; string value=2; bool optional=3; }
+message Network { repeated Sysctl settings=1; }
+message Interface { string name=1; optional uint32 mtu=2; optional string mac=3; optional bool up=4; optional string addrgenmode=5; }
+message Address { string interface=1; string prefix=2; }
+message Tenant { string name=1; uint32 table_id=2; }
+message Bridge { string name=1; optional bool stp=2; optional uint32 mtu=3; optional string mac=4; optional uint32 ageing_time=5; }
+message BridgePort { string bridge=1; string port=2; optional bool learning=3; optional bool neigh_suppress=4; }
+message Binding { string bridge=1; string tenant=2; }
+message Vxlan { string name=1; uint32 vni=2; string local=3; uint32 port=4; bool learning=5; string underlay=6; }
+message Route { string prefix=1; string gateway=2; string interface=3; uint32 table=4; }
+message Ospf { string router_id=1; string vrf=2; }
+message OspfNetwork { string prefix=1; string area=2; string vrf=3; }
+message OspfInterface { string name=1; optional bool passive=2; string network_type=3; string vrf=4; string area=5; optional uint32 cost=6; optional uint32 hello_interval=7; optional uint32 dead_interval=8; }
+message Ospf6Interface { string name=1; string vrf=2; string area=3; optional bool passive=4; string network_type=5; optional uint32 cost=6; optional uint32 hello_interval=7; optional uint32 dead_interval=8; }
+message Bgp { uint32 asn=1; string vrf=2; string router_id=3; optional bool default_ipv4_unicast=4; }
+message Peer { uint32 asn=1; string vrf=2; string name=3; uint32 remote_as=4; string update_source=5; string peer_group=6; optional bool active=7; optional bool rr_client=8; AddressFamily family=9; }
+message BgpNetwork { uint32 asn=1; string vrf=2; AddressFamily family=3; string prefix=4; }
+message BgpRedistribute { uint32 asn=1; string vrf=2; AddressFamily family=3; string protocol=4; }
+message BgpType5 { uint32 asn=1; string vrf=2; AddressFamily family=3; optional bool enabled=4; }
+message EvpnGlobal { uint32 asn=1; optional bool advertise_all_vni=2; optional bool advertise_svi_ip=3; }
+message Evpn { uint32 asn=1; uint32 vni=2; string vrf=3; string rd=4; repeated string import_rts=5; repeated string export_rts=6; }
+message L3Vni { string tenant=1; uint32 vni=2; }
+message Operation {
+ string id=1; OpCode code=2; Action action=3; repeated string depends_on=4;
+ oneof data {
+  Network network=10; Interface interface=11; Address address=12; Tenant tenant=13;
+  Bridge bridge=14; BridgePort bridge_port=15; Binding binding=16; Vxlan vxlan=17; Route route=18;
+  Ospf ospf=20; OspfNetwork ospf_network=21; OspfInterface ospf_interface=22;
+  Ospf6Interface ospf6_interface=23;
+  Bgp bgp=30; Peer peer=31; EvpnGlobal evpn_global=32; Evpn evpn=33; L3Vni l3vni=34;
+  BgpNetwork bgp_network=35; BgpRedistribute bgp_redistribute=36; BgpType5 bgp_type5=37;
+ }
+}
+message NodeRequest { string node_id=1; }
+message BeginRequest { string node_id=1; uint64 base_revision=2; string request_id=3; }
+message Transaction { string id=1; string node_id=2; uint64 base_revision=3; repeated Operation operations=4; bool frozen=5; string task_id=6; }
+message StageRequest { string node_id=1; string transaction_id=2; repeated Operation operations=3; }
+message CommitRequest { string node_id=1; string transaction_id=2; string request_id=3; }
+message TaskRequest { string node_id=1; string task_id=2; uint64 after_sequence=3; }
+message AbortRequest { string node_id=1; string transaction_id=2; }
+// Retry saved Undo only; never marks a rollback successful without readback.
+message RetryRollbackRequest { string node_id=1; string task_id=2; string request_id=3; uint64 expected_sequence=4; uint64 expected_revision=5; }
+message Empty {}
+message StepResult { string id=1; string backend=2; string operation_id=3; string state=4; string error=5; string rollback_error=6; }
+message Task { string id=1; string transaction_id=2; string node_id=3; string state=4; uint64 sequence=5; uint64 revision=6; string error_code=7; string error=8; repeated StepResult steps=9; }
+message Capability { OpCode code=1; repeated string backends=2; bool rollback=3; }
+message Capabilities { string node_id=1; uint32 protocol_version=2; repeated Capability operations=3; repeated QueryCapability queries=4; repeated string features=5; }
+message State { string node_id=1; string instance_id=2; string node_state=3; uint64 revision=4; string running_json=5; map<string,string> observations=6; string observation_error=7; }
+enum QueryKind {
+ QUERY_UNSPECIFIED=0; TENANTS=1; BRIDGES=2; INTERFACES=3; ADDRESSES=4;
+ ROUTES=5; FDB=6; NEIGHBORS=7; VXLAN_TUNNELS=8;
+ BGP_SUMMARY=9; BGP_NEIGHBORS=10; BGP_ROUTES=11; EVPN_ROUTES=12; EVPN_VNI=13;
+ OSPF_SUMMARY=14; OSPF_INTERFACES=15; OSPF_NEIGHBORS=16; OSPF_DATABASE=17; OSPF_ROUTES=18; PORTS=19;
+}
+message QueryCapability { QueryKind kind=1; repeated AddressFamily families=2; repeated uint32 ospf_versions=3; }
+message QueryRequest {
+ string node_id=1; QueryKind kind=2; string vrf=3; string bridge=4; string interface=5;
+ AddressFamily family=6; uint32 ospf_version=7; uint32 page_size=8; string page_token=9;
+ uint32 route_type=10; string prefix=11; string neighbor=12;
+}
+// Pagination tokens carry a fingerprint of the queried data. Changed data
+// invalidates the token instead of silently skipping or duplicating records.
+message QueryResponse {
+ string node_id=1; QueryKind kind=2; string source=3; int64 collected_unix_ms=4;
+ repeated google.protobuf.Struct records=5; string next_page_token=6; uint32 total_count=7;
+ bool stale=8; string error=9; uint64 revision=10;
+}
+message VerifyResourcesRequest { string node_id=1; uint64 expected_revision=2; repeated Operation operations=3; }
+message VerifyResourcesResponse { string node_id=1; uint64 revision=2; bool verified=3; repeated string errors=4; }
+service Agent {
+ rpc Begin(BeginRequest) returns(Transaction);
+ rpc Stage(StageRequest) returns(Transaction);
+ rpc Commit(CommitRequest) returns(Task);
+ rpc Abort(AbortRequest) returns(Empty);
+ rpc RetryRollback(RetryRollbackRequest) returns(Task);
+ rpc GetTask(TaskRequest) returns(Task);
+ rpc WatchTasks(TaskRequest) returns(stream Task);
+ rpc GetState(NodeRequest) returns(State);
+ rpc GetCapabilities(NodeRequest) returns(Capabilities);
+ rpc Query(QueryRequest) returns(QueryResponse);
+ rpc VerifyResources(VerifyResourcesRequest) returns(VerifyResourcesResponse);
+}
+message Registration { string proposed_node_id=1; string registration_id=2; string instance_id=3; string endpoint=4; Capabilities capabilities=5; }
+message Registered { string node_id=1; }
+message Heartbeat { string node_id=1; string instance_id=2; string endpoint=3; uint64 revision=4; }
+service Controller {
+ rpc Register(Registration) returns(Registered);
+ rpc Heartbeat(.sdn.agent.v1.Heartbeat) returns(Empty);
+}

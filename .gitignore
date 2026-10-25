@@ -1,0 +1,27 @@
+/bin/
+/artifacts/
+/lab/state/
+/docker/state/
+*.test
+coverage.out
+
+# Local deployment configuration and credentials
+/agent.conf
+/agent.env
+.env
+.env.*
+!.env.example
+!.env.sample
+!.env.template
+*.key
+*-key.pem
+
+# Python caches and local virtual environments
+__pycache__/
+*.py[cod]
+/.venv/
+
+# Generated documentation
+/.venv-docs/
+/docs/html/
+/docs/_build/

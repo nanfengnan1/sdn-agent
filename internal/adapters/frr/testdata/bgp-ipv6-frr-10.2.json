@@ -1,0 +1,9 @@
+{
+ "vrfId": 0,
+ "vrfName": "default",
+ "tableVersion": 0,
+ "routerId": "10.0.0.1",
+ "defaultLocPrf": 100,
+ "localAS": 65000,
+ "routes": { "2001:db8:1::/64": [{"pathFrom":"external","prefix":"2001:db8:1::","prefixLen":64,"network":"2001:db8:1::/64","version":0,"metric":0,"weight":32768,"peerId":"(unspec)","path":"","origin":"IGP","nexthops":[{"ip":"::","hostname":"01839736c409","afi":"ipv6","scope":"global","used":true}]}]
+ }  } 
