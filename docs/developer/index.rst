@@ -9,7 +9,8 @@
 先准备开发环境并构建程序，请读 :doc:`testing`；把构建结果安装、配置并运行到节点，
 请直接读 :ref:`agent-source-install` 或 :ref:`agent-docker-deploy`。
 生成 HTML 手册不属于 Agent 程序的编译步骤。
-准备交付版本时，继续阅读 :doc:`版本发布、交付与升级 </user/release>`。
+制作带文档的离线包、推送 tag 和上传 GitHub 附件，按 :doc:`release` 执行；
+接收方安装和升级见 :doc:`版本发布、交付与升级 </user/release>`。
 增加新的数据面或执行后端时，按 :doc:`适配器扩展流程 <adapters>` 确定资源归属、实现接口、注册能力并验证恢复。
 AI 工具接入与扩展见 :doc:`MCP 适配层设计 <mcp>`；它通过公开 gRPC 复用事务，不直接执行数据面命令。
 
@@ -27,6 +28,7 @@ AI 工具接入与扩展见 :doc:`MCP 适配层设计 <mcp>`；它通过公开 g
    adapters
    mcp
    testing
+   release
    documentation
 
 当前关键约定

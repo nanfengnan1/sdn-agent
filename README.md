@@ -17,6 +17,7 @@
 源码 Alpine 镜像（内含 FRR）见 [docker/README.md](docker/README.md)，Dockerfile 位于 `docker/Dockerfile`。完整隔离部署和空白手动测试环境见 [Controller Docker 指南](../sdn-controller/docker/README.md)。
 
 交付版本请读 [版本发布、交付与升级](docs/user/release.rst)：包含二进制打包与校验、Docker 镜像分发、HTML 手册交付及升级回退边界。
+维护者制作带文档的 `.tar.xz` 包、推送 Git tag、发布 GitHub Release 和补传附件，见[开发发布流程](docs/developer/release.rst)。
 
 本仓库包含可运行的 Agent、`sdnctl` 测试客户端、身份注册/心跳用的 `mock-controller`、真实 Docker 实验与回归测试。正式的全网 Controller 是独立项目；这里的 mock 不承担全网规划。
 
