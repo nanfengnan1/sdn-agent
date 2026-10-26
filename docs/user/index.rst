@@ -8,6 +8,8 @@
 
 **第一次部署从这里开始：** :ref:`agent-source-install` → 配置与启动 → 验证服务；
 使用容器则直接阅读 :ref:`agent-docker-deploy`。
+部署前先核对 :ref:`支持平台与 Linux / FRR 版本 <agent-supported-versions>`：当前内核验收基线为
+Linux 6.8.0-138-generic，Alpine 3.22.6 容器使用 FRR 10.2.2；FRR 10.0.0 属于历史回归版本。
 这里的编译安装是构建 Agent 程序，与生成 HTML 手册的 ``make -C docs html`` 不同。
 
 .. container:: doc-cards

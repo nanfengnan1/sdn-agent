@@ -4,6 +4,8 @@
 
 项目通过统一的 Driver 接口扩展不同数据面和执行后端。**当前实现 Linux 和 FRR 适配器**：Linux 适配器管理内核中的接口、地址、路由、桥域、VRF 和 VXLAN；FRR 适配器管理路由协议配置，配合数据面完成网络功能。开发新的数据面适配器时，可按[适配器扩展流程](docs/developer/adapters.rst)实现接口、注册能力并补齐测试。
 
+**支持版本：** 当前已验证 Linux/amd64，内核基线为 `6.8.0-138-generic`；Docker 宿主机为 Ubuntu 22.04.5 LTS，Agent 容器为 Alpine 3.22.6，FRR 为 **10.2.2**。FRR **10.0.0** 镜像另有历史回归记录。它们是已验证组合，不是最低版本或所有更高版本的兼容承诺；完整范围见[用户安装手册](docs/user/installation.rst)的“支持平台与 Linux / FRR 版本”。
+
 支持 AI 通过 **MCP** 调用：[`mcp/`](mcp/README.md) 提供独立的 `sdn-agent-mcp` stdio 服务，复用 Agent gRPC。默认开放能力、状态、查询、验证和任务读取；使用 `-allow-writes` 后可提交事务或重试回滚。运行 `make build-mcp` 构建，接入和调用示例见 [MCP 用户手册](docs/user/mcp.rst)，实现边界及扩展流程见 [MCP 设计](docs/developer/mcp.rst)。
 
 默认 Docker 部署现在将 **Agent、Redis、FRR 集成在同一个容器**。使用 [`docker/agent.conf`](docker/agent.conf) 配置应用和内置 Redis，支持只读挂载到 `/etc/sdn-agent/agent.conf` 覆盖；原生 CLI 保持兼容。详见 [统一配置手册](docs/html/user/configuration.html) 与 [Docker 操作](docker/README.md)。

@@ -10,6 +10,73 @@
    :local:
    :depth: 2
 
+.. _agent-supported-versions:
+
+支持平台与 Linux / FRR 版本
+------------------------------------------------------------
+
+Agent 的本地数据面运行平台为 **Linux**，当前验收架构为 **x86_64 / amd64**。
+以下区分已验证的部署组合、历史回归版本和运行依赖；版本号不是最低兼容版本声明。
+
+.. list-table:: 已验证版本与适用范围
+   :header-rows: 1
+   :widths: 24 31 45
+
+   * - 组件
+     - 版本
+     - 范围
+   * - Linux 宿主机发行版
+     - Ubuntu 22.04.5 LTS（x86_64）
+     - 当前 Docker 实验宿主机，2026-10-26 只读核对；不等同于已验证该发行版自带的所有 FRR 包
+   * - Linux 内核
+     - 6.8.0-138-generic
+     - 已有容器网络验收使用的宿主内核；当前宿主机与 Agent 容器读回一致
+   * - Agent 容器用户空间
+     - Alpine 3.22；验收实例为 3.22.6
+     - 当前 Dockerfile 默认运行镜像系列；容器共享宿主机 Linux 内核，Alpine 版本不是内核版本
+   * - FRR 当前验收基线
+     - 10.2.2
+     - Alpine 源码镜像；已有资源验收覆盖 IPv4 / IPv6、OSPFv2 / v3、BGP / EVPN、Type-5、查询与回滚场景
+   * - FRR 历史回归基线
+     - quay.io/frrouting/frr:10.0.0（CLI 显示 10.0_git）
+     - 2026-10-24 的 IPv4 VXLAN / EVPN 与事务恢复实验；不据此宣称后来新增能力已在该版本重新验收
+   * - Linux 网络工具
+     - 当前容器 iproute2 6.15.0
+     - 2026-10-26 只读核对；运行时需要 ip / bridge 的 JSON 输出及对应网络对象管理命令
+
+2026-10-25 的联合验收版本和功能范围记录在相邻项目
+``sdn-controller/docs/resource-validation.md`` 与 ``sdn-controller/docs/bundled-validation.md``；
+FRR 10.0.0 的历史证据见 :download:`Agent 实测验收记录 <../validation.md>`。
+2026-10-26 的检查仅确认当前版本，不表示重新运行上述网络验收。
+
+其他 Linux 发行版、内核版本、CPU 架构以及 FRR 版本需要另行验证。
+目前没有经过完整兼容矩阵验证的最低内核版本，也没有承诺 ``FRR >= 10.0`` 或所有 10.x 均兼容。
+切换版本时，至少核对配置下发、JSON 查询、状态读回、失败回滚、重启恢复和所用协议的实际转发。
+
+运行依赖须满足以下条件：
+
+* Linux 内核支持所用的 network namespace、veth、Bridge、VRF、VXLAN、IPv4 / IPv6 功能，
+  Agent 在目标网络命名空间拥有相应网络管理权限。
+* iproute2 提供 ``ip``、``bridge`` 及 JSON 查询；系统提供 ``sysctl``。
+  VXLAN / EVPN 场景还使用 Bridge 端口 learning、neigh_suppress 等属性。
+* FRR 提供 ``vtysh``、所用协议的 JSON 查询及 ``/usr/lib/frr/frr-reload.py``。
+  启用 zebra、bgpd、ospfd；使用 OSPFv3 时还需 ospf6d。Agent 必须独占管理对应 FRR 实例。
+
+``docker/Dockerfile`` 使用 ``apk add frr frr-pythontools``，未锁定 FRR 包的精确版本。
+因此重新构建后应核对实际软件版本；发布时记录镜像 digest 与软件包版本，见 :doc:`release`。
+可在 **Agent 实际运行环境中** 执行以下只读检查；容器部署时在容器内运行，
+宿主机发行版则另外在宿主机检查：
+
+.. code-block:: bash
+
+   cat /etc/os-release
+   uname -r
+   uname -m
+   ip -Version
+   bridge -Version
+   vtysh -c 'show version'
+   test -f /usr/lib/frr/frr-reload.py
+
 先确定部署地址与模式
 ----------------------------------------
 
@@ -72,8 +139,8 @@ FRR 和 FRR Python 工具；不同发行版的 FRR 包版本可能不同，要�
 本项目的 Alpine 镜像已把这些依赖集中在 Dockerfile 中安装；
 不希望自行准备原生 FRR 时，直接使用 :ref:`agent-docker-deploy`。
 
-已有验收覆盖独立实验的 FRR 10.0.0 镜像，以及 Alpine 源码镜像中的 FRR 10.2.2。
-发行版默认包不一定等于这些版本；更换版本需重新验证 vtysh 输出、配置回读和失败恢复。
+Linux / FRR 已验证版本及范围见 :ref:`agent-supported-versions`。
+发行版默认包不一定等于验收版本；更换版本需重新验证 vtysh 输出、配置回读和失败恢复。
 
 .. code-block:: bash
    :caption: Linux 部署节点：检查运行依赖
@@ -83,8 +150,8 @@ FRR 和 FRR Python 工具；不同发行版的 FRR 包版本可能不同，要�
    sudo vtysh -c 'show version'
    sudo vtysh -c 'show running-config'
 
-FRR 的 zebra、bgpd、ospfd 及相应版本依赖的守护进程应已启动。
-检查 ``/etc/frr/daemons`` 和发行版 FRR 服务状态；bgpd / ospfd 是本实验需要的协议进程。
+FRR 的 zebra、bgpd、ospfd 及相应版本依赖的守护进程应已启动；使用 OSPFv3 还需 ospf6d。
+检查 ``/etc/frr/daemons`` 和发行版 FRR 服务状态，并按所用协议启用守护进程。
 Agent 原生二进制不会替你安装或启动 FRR，也不会给已有 FRR 自动创建基础配置。
 
 Agent 必须独占管理对应 FRR 实例，因为回滚使用实例配置快照。
@@ -335,7 +402,7 @@ Agent 管理的是容器网络命名空间，不是宿主机业务接口。
    docker exec sdna-doc-demo sdnctl -insecure state
 
 等待状态为 running / healthy，再确认 capabilities 和 state 返回正常。
-容器入口先校验配置，再等待本地 Redis 和 FRR 就绪，然后启动 Agent；默认启用 bgpd / ospfd，
+容器入口先校验配置，再等待本地 Redis 和 FRR 就绪，然后启动 Agent；默认启用 bgpd / ospfd / ospf6d，
 不预置租户、业务地址或 BGP / OSPF 配置。
 已在宿主机安装 CLI 时，也可用 ``sdnctl -addr 127.0.0.1:39090 -insecure state`` 查询。
 

@@ -21,7 +21,9 @@ docker run --rm sdn-agent:alpine sdn-agent -h
 
 Redis 服务端与 CLI 从 `redis:7.4-alpine` 阶段复制，保持现有数据卷使用的版本系列；构建时检查两个程序可运行。`REDIS_IMAGE` 可用于固定已验证的 digest。容器健康检查跟随有效配置检查 Agent 端口、Redis PING 和 FRR 进程。
 
-已验收的 Alpine 环境使用 FRR 10.2.2，后续包版本由构建仓库决定；更换版本需要重新回归。基础镜像可用 `--build-arg GO_IMAGE=... --build-arg ALPINE_IMAGE=...` 替换，发布时应固定验证过的 digest。
+已验收的组合为 **Linux/amd64、宿主内核 6.8.0-138-generic、Alpine 3.22.6、FRR 10.2.2**。当前宿主机发行版为 Ubuntu 22.04.5 LTS；容器共享宿主内核，Alpine 版本不代表内核版本。FRR 10.0.0 镜像属于另一套历史回归环境，版本与功能范围见[用户安装手册](../docs/user/installation.rst)的“支持平台与 Linux / FRR 版本”。
+
+Dockerfile 未锁定 FRR 包的精确版本，后续包版本由构建仓库决定；更换版本需要重新回归。基础镜像可用 `--build-arg GO_IMAGE=... --build-arg ALPINE_IMAGE=...` 替换，发布时应固定验证过的 digest，并记录实际内核及 FRR 版本。
 
 ## 2. 启动独立测试节点
 
