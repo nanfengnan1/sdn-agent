@@ -36,7 +36,11 @@ Type-5 补充 IPv4/IPv6 prefix。原始结构化字段仍保留，避免隐藏�
 InvalidArgument；采集/解析失败为 FailedPrecondition；分页结果变化为 Aborted。
 采集失败不更新 Config/Running，也不生成成功的空响应。
 Query 不锁住整个内核动态表，因此只能承诺带时间戳的实时观测。
-分页令牌是排序后记录的 SHA-256 摘要与位置，变化后必须重启查询。
+分页令牌是按稳定字段排序后记录的 SHA-256 摘要与位置。
+``query_fingerprint.go`` 明确列出不参与摘要的观测倒计时和计数，例如 Linux bridge 的
+hello_timer/gc_timer；配置 ageing_time、hello_time、max_age、成员和路由路径仍参与。
+返回记录保留原始 details。排序使用与摘要相同的稳定字段，避免计时器变化让记录跨页移动。
+实际资源或路径变化后必须重启查询。Linux 6.8 真实接口 fixture 用于分页回归。
 
 安全导入
 --------
@@ -72,10 +76,11 @@ Controller 可据此采用已存在对象，而不重复创建。读回通过后
 测试资源已删除；证据与限制见仓库 ``docs/testing.md``。
 
 IPv6 冷启动验收
---------------
+------------------------------
 
 IPv4 实验的业务 SVI 常设置 ``addrgenmode none``。扩展为 IPv6 时必须单独配置
-业务 SVI 的链路本地地址，例如通过 ``INTERFACE SET addrgenmode=eui64``。
+业务 SVI 的链路本地地址。首次 UP 前可设置 ``INTERFACE SET addrgenmode=eui64``；
+已 UP 且原来使用 none 的接口，仅改 mode 不一定补生成地址，应使用 ADDRESS 显式增加链路本地地址。
 无编号 L3VNI SVI 保持原配置。全局地址和链路本地地址须完成 DAD。
 不把预先 ping 网关作为跨 Leaf 验收前提，否则会掩盖邻居解析缺陷。
 

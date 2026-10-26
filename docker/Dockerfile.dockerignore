@@ -5,6 +5,7 @@
 !sdn-agent/api/**
 !sdn-agent/internal/**
 !sdn-agent/cmd/**
+!sdn-agent/mcp/**
 !sdn-agent/docker/**
 **/state/**
 **/.env

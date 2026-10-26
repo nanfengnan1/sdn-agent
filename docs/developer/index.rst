@@ -11,6 +11,7 @@
 生成 HTML 手册不属于 Agent 程序的编译步骤。
 准备交付版本时，继续阅读 :doc:`版本发布、交付与升级 </user/release>`。
 增加新的数据面或执行后端时，按 :doc:`适配器扩展流程 <adapters>` 确定资源归属、实现接口、注册能力并验证恢复。
+AI 工具接入与扩展见 :doc:`MCP 适配层设计 <mcp>`；它通过公开 gRPC 复用事务，不直接执行数据面命令。
 
 .. container:: doc-path
 
@@ -24,6 +25,7 @@
    resources
    execution-storage
    adapters
+   mcp
    testing
    documentation
 

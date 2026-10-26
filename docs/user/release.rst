@@ -55,6 +55,12 @@
 原生二进制包包含 Agent 和 CLI，运行时依赖仍需按 :doc:`installation` 安装。
 mock-controller 是开发工具，不作为正式 Controller 交付。
 
+需要 AI 接入时，另行交付同一源码版本的 ``sdn-agent-mcp``。
+``make build`` / ``make build-mcp`` 生成 ``bin/sdn-agent-mcp``，可加入下面的版本目录后
+一并归档和校验；以下基础二进制脚本只打包 Agent 与 sdnctl。
+MCP 运行端不需要本地 FRR，只需访问目标 Agent 并配置凭据和 CA，见 :doc:`mcp`。
+新构建的 Docker 镜像已包含 MCP 程序，既有镜像不会自动增加该文件。
+
 .. code-block:: bash
    :caption: Bash：sdn-agent 项目根目录；前述检查已经通过
 

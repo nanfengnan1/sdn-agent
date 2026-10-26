@@ -71,8 +71,10 @@ func (a *Agent) Query(ctx context.Context, q *pb.QueryRequest) (*pb.QueryRespons
 		}
 		return nil, status.Error(codes.FailedPrecondition, e.Error())
 	}
-	// Stable ordering and a fingerprint bind pagination to the selected data.
-	keys := make([]string, len(records))
+	// Order by the same stable projection used by the token. Sorting the raw
+	// rows would let a changing timer move a record across page boundaries.
+	type encodedRecord struct{ stable, raw string }
+	encoded := make([]encodedRecord, len(records))
 	if len(records) > 100000 {
 		return nil, status.Error(codes.ResourceExhausted, "query exceeds 100000 records; narrow filters")
 	}
@@ -81,9 +83,22 @@ func (a *Agent) Query(ctx context.Context, q *pb.QueryRequest) (*pb.QueryRespons
 		if err != nil {
 			return nil, status.Error(codes.Internal, "query record encoding failed")
 		}
-		keys[i] = string(b)
+		stable, err := json.Marshal(stableQueryValue(row))
+		if err != nil {
+			return nil, status.Error(codes.Internal, "query fingerprint encoding failed")
+		}
+		encoded[i] = encodedRecord{string(stable), string(b)}
 	}
-	sort.Strings(keys)
+	sort.Slice(encoded, func(i, j int) bool {
+		if encoded[i].stable == encoded[j].stable {
+			return encoded[i].raw < encoded[j].raw
+		}
+		return encoded[i].stable < encoded[j].stable
+	})
+	keys := make([]string, len(encoded))
+	for i, row := range encoded {
+		keys[i] = row.stable
+	}
 	digest := sha256.Sum256([]byte(fmt.Sprintf("%d/%s/%s/%s/%d/%d/%d/%s/%s\n", q.Kind, q.Vrf, q.Bridge, q.Interface, q.Family, q.OspfVersion, q.RouteType, q.Prefix, q.Neighbor) + strings.Join(keys, "\n")))
 	fingerprint := hex.EncodeToString(digest[:])
 	start := 0
@@ -114,9 +129,9 @@ func (a *Agent) Query(ctx context.Context, q *pb.QueryRequest) (*pb.QueryRespons
 		return nil, loadError(err)
 	}
 	out := &pb.QueryResponse{NodeId: a.NodeID, Kind: q.Kind, Source: source, CollectedUnixMs: time.Now().UnixMilli(), TotalCount: uint32(len(keys)), Revision: run.Revision}
-	for _, text := range keys[start:end] {
+	for _, entry := range encoded[start:end] {
 		var row map[string]any
-		_ = json.Unmarshal([]byte(text), &row)
+		_ = json.Unmarshal([]byte(entry.raw), &row)
 		item, err := structpb.NewStruct(row)
 		if err != nil {
 			return nil, status.Error(codes.Internal, "query record conversion failed")

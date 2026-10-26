@@ -281,7 +281,7 @@ Agent 独立实验固定 FRR 10.0.0；2026-10-25 的完整 Alpine 验收使用 F
 仓库已有历史报告 ``docs/validation.md``，近期可靠性与 Docker 报告还位于 Controller 仓库。
 内置 Redis 与外部配置版本的历史结果保留在相邻 Controller 项目
 ``docs/bundled-validation.md``。本轮独立资源的整网验证记录在该项目
-``docs/resource-validation.md``，分别列明已完成和待验证范围；HTML 构建不能替代网络验收。
+``docs/resource-validation.md``，记录实际协议、资源、CLI、浏览器与部署结果；HTML 构建不能替代网络验收。
 
 尚未被这些结果覆盖的能力
 ------------------------

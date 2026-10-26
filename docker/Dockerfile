@@ -10,9 +10,11 @@ RUN --mount=type=cache,target=/go/pkg/mod go mod download
 COPY sdn-agent/api ./api
 COPY sdn-agent/internal ./internal
 COPY sdn-agent/cmd ./cmd
+COPY sdn-agent/mcp ./mcp
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 go build -trimpath -o /out/sdn-agent ./cmd/sdn-agent && \
-    CGO_ENABLED=0 go build -trimpath -o /out/sdnctl ./cmd/sdnctl
+    CGO_ENABLED=0 go build -trimpath -o /out/sdnctl ./cmd/sdnctl && \
+    CGO_ENABLED=0 go build -trimpath -o /out/sdn-agent-mcp ./mcp/cmd/sdn-agent-mcp
 
 FROM ${ALPINE_IMAGE}
 RUN apk add --no-cache ca-certificates tini bash python3 libssl3 libcrypto3 frr frr-pythontools \

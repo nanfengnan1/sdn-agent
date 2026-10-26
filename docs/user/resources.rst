@@ -129,11 +129,13 @@ Agent 不会默认关闭 IPv6。需要 IPv6 三层转发时通过 ``NODE_NETWORK
 ``net.ipv6.conf.all.forwarding=1``；旧实验显式禁用 IPv6 的请求仍保持原语义。
 
 IPv6 业务网关必须具备链路本地地址
---------------------------------
+------------------------------------------------------------
 
 为 BD 配置 IPv6 网关时，除了全局地址，还必须为该业务 SVI 保留可用的链路本地地址。
 IPv4 参考实验对 br10/br20 设置的 ``addrgenmode none`` 不能原样用于 IPv6 网关。
-先提交接口 ``addrgenmode=eui64``，再确认链路本地和全局地址均完成 DAD，之后验证业务：
+可以在首次启用接口之前配置 ``addrgenmode=eui64`` 自动生成地址。
+对于已经 UP 且过去设置为 none 的接口，仅修改该模式不保证补生成地址；
+应显式配置适合该链路的链路本地地址，确认它与全局地址均完成 DAD，之后验证业务：
 
 .. code-block:: json
 
@@ -141,6 +143,9 @@ IPv4 参考实验对 br10/br20 设置的 ``addrgenmode none`` 不能原样用于
      "operations": [
        {"id":"br10-ipv6-mode", "code":"INTERFACE", "action":"SET",
         "interface":{"name":"br10","addrgenmode":"eui64"}},
+       {"id":"br10-link-local", "code":"ADDRESS", "action":"CREATE",
+        "depends_on":["br10-ipv6-mode"],
+        "address":{"interface":"br10","prefix":"fe80::ff:fe00:10/64"}},
        {"id":"br10-ipv6-address", "code":"ADDRESS", "action":"CREATE",
         "depends_on":["br10-ipv6-mode"],
         "address":{"interface":"br10","prefix":"2001:db8:10::fe/64"}}
@@ -148,8 +153,9 @@ IPv4 参考实验对 br10/br20 设置的 ``addrgenmode none`` 不能原样用于
    }
 
 可用 ``sdnctl -kind ADDRESSES -interface br10 -family IPV6 query`` 查看地址，
-确认既有全局地址，也有 ``fe80::/64`` 地址，且 ``details.flags`` 没有 tentative。
+确认既有全局地址，也有 ``fe80::`` 链路本地地址，且 ``details`` 没有 tentative/dadfailed 标志。
 实际部署的链路本地前缀范围为 ``fe80::/10``；EUI-64 自动生成的接口地址通常显示 /64。
+上述示例对应 br10 的 MAC ``02:00:00:00:00:10``。其他接口应使用合适且不冲突的地址。
 
 在 Linux 6.8 中，转发报文触发邻居解析时，内核需要出接口的链路本地地址作为 NS 源。
 缺少它会导致目标邻居停留在 INCOMPLETE/FAILED，并且接入口抓不到 NS。
@@ -184,8 +190,9 @@ Linux 空表返回空数组；命令失败、FRR warning、JSON 损坏、接口�
 错误，不会伪装成空表。Agent 实时查询不返回缓存，``stale`` 默认为 false。
 
 分页默认 200 条、最多 1000 条。后续页携带 ``-page-token``，其他过滤字段保持相同。
-令牌绑定结果内容摘要；若数据变化，返回 ``Aborted``，应重新从第一页开始。
-动态计数和计时器也可能让摘要变化，因此分页不是冻结的历史快照。
+令牌绑定记录稳定字段的摘要；接口/路由集合、配置或转发路径变化时返回 ``Aborted``，
+应重新从第一页开始。已知桥倒计时、协议 uptime、流量计数等不参与分页排序或摘要，
+原始观测字段仍完整返回。分页不是冻结的历史快照。
 
 查询种类包括 TENANTS、BRIDGES、INTERFACES、ADDRESSES、PORTS、ROUTES、FDB、
 NEIGHBORS、VXLAN_TUNNELS、BGP_SUMMARY、BGP_NEIGHBORS、BGP_ROUTES、EVPN_ROUTES、

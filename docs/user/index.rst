@@ -43,6 +43,7 @@
    release
    configuration
    quickstart
+   mcp
    operations
    resources
    transactions
@@ -55,6 +56,7 @@
 * **Linux 宿主机**：构建代码和镜像、启动容器；仓库通常位于 ``~/program/github/sdn-agent``。
 * **Agent 节点**：网络命令作用于 Agent 所在网络命名空间；容器内 Agent 管理该容器的接口。
 * **CLI 客户端**：运行 ``sdnctl``，通过 gRPC 连接目标 Agent。
+* **AI / MCP 客户端**：启动 ``sdn-agent-mcp`` stdio 子进程，通过工具调用访问固定 Agent；接入见 :doc:`mcp`。
 * **Controller / Web**：跨节点规划和管理入口，分别属于独立的 ``sdn-controller``、``sdn-web`` 项目。
 
 已由 Controller 纳管的节点应从 Controller 或 Web 修改配置，让全局期望配置与节点事务保持一致。

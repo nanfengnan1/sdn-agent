@@ -7,6 +7,8 @@
 - 独占 FRR 10.2.2 容器验证新增 6 类 op 的 Apply、实际 readback、snapshot rollback：OSPF6_INSTANCE、OSPF6_INTERFACE、BGP_AF_PEER、BGP_NETWORK、BGP_REDISTRIBUTE、EVPN_TYPE5。
 - 实际验证 BGP IPv6、EVPN route/VNI 及 OSPFv3 summary/interface/neighbor/database/route JSON 查询。真实 JSON 已保存到 `internal/adapters/frr/testdata/`。
 - 查询测试覆盖 VRF/BD/端口实际关联、未绑定对象、IPv6 路由/邻居、Type-5 IPv6 prefix、错误与空表区分、分页数据改变和只读资源验证屏障。
+- 真实 Linux 6.8 接口 fixture 验证桥 hello_timer/gc_timer 等变化不使分页失败或跨页重复，配置 ageing_time、接口新增、路由撤销及下一跳变化仍使旧令牌失效。
+- 双栈冷启动故障已定位为 IPv6 业务 SVI 缺少链路本地地址。仅切换已 UP 接口的 addrgenmode 不会补生成地址；Controller 显式补 LL 后，删除两个指定主机全局邻居，双向首包均成功，NS/NA 抓包证据见 `artifacts/ipv6-cold-start/`。
 - 临时容器 `sdn-agent-feature-probe` 已删除；没有修改现有 `sdn-docker-*` 或 `sevpn-*` 容器。
 
 本节为 Agent 单节点及适配器结果。Controller/Web 多节点端到端结果由总体集成报告记录。

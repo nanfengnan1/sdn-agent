@@ -10,6 +10,8 @@
 
 软件版本打包、镜像分发、HTML 手册交付和升级回退见 [版本发布、交付与升级](user/release.rst)。
 
+AI 客户端通过 MCP 接入见 [MCP 用户手册](user/mcp.rst)，适配层设计、源码定位和工具扩展方法见 [MCP 开发说明](developer/mcp.rst)。
+
 ## 查看帮助
 
 在 `docs/` 目录执行 `make help`，或在项目根目录执行 `make -C docs help`。
