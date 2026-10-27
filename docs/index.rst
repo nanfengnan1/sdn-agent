@@ -3,7 +3,7 @@ sdn-agent 文档
 
 .. container:: doc-lead
 
-   管理本地数据面，通过适配器扩展执行后端；当前实现 Linux 和 FRR 适配器。
+   管理本地数据面，默认使用 Linux + FRR，也可选择 VPP + FRR EVPN / 对称 IRB 实验模式。
    先部署 Agent，再通过 CLI 或 Controller 配置网络，查询状态并处理事务恢复。
 
 .. container:: doc-cards
@@ -30,12 +30,15 @@ sdn-agent 文档
 
       :doc:`开发指南 <developer/index>`
 
-      协议、事务日志、依赖调度、Linux / FRR 适配器和测试。
+      协议、事务日志、依赖调度、Linux / FRR / VPP 适配器和测试。
 
 从哪里开始
 ------------------------------------------------------------
 
 独立节点可先按源码或 Docker 教程启动，再阅读 :doc:`第一个 CLI 事务 <user/quickstart>`。加入整网管理时，先部署 Controller，再配置 Agent 的注册目标和可回连地址。
+
+选择 VPP 数据面时从 :doc:`VPP + FRR 使用指南 <user/vpp>` 开始；
+源码版本选择、LCP 和完整报文流程见 :doc:`VPP 开发说明 <developer/vpp>`。
 
 让 AI 查询或操作独立节点时，阅读 :doc:`MCP 接入 <user/mcp>`；
 默认提供只读工具，显式启用写模式后沿用 Agent 的版本与事务流程。

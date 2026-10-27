@@ -171,6 +171,11 @@ func (d *Driver) Query(ctx context.Context, q *pb.QueryRequest) ([]map[string]an
 						row[dst] = v
 					}
 				}
+				for _, key := range []string{"local", "remote"} {
+					if value, ok := data[key+"6"]; ok {
+						row[key] = value
+					}
+				}
 			}
 			if kind(by[master]) == "bridge" {
 				row["bridge"] = master

@@ -1,0 +1,76 @@
+# syntax=docker/dockerfile:1
+ARG ALPINE_VERSION=3.22
+ARG FRR_SOURCE_MODE=git
+FROM alpine:${ALPINE_VERSION} AS build-deps
+RUN apk add --no-cache build-base autoconf automake libtool linux-headers \
+    bison flex python3 py3-setuptools json-c-dev c-ares-dev libcap-dev \
+    libyang-dev pcre2-dev readline-dev ncurses-dev protobuf-c-dev \
+    protobuf-c-compiler elfutils-dev bash git ca-certificates pax-utils
+RUN apk add --no-cache python3-dev bsd-compat-headers gawk
+FROM build-deps AS source-git
+ARG FRR_REPOSITORY=https://github.com/nanfengnan1/frr.git
+ARG FRR_REF=frr-10.7.0
+ARG SOURCE_CACHE_BUST=0
+COPY vpp/fetch-source.sh /build-tools/fetch-source.sh
+RUN : "$SOURCE_CACHE_BUST" && sh /build-tools/fetch-source.sh "$FRR_REPOSITORY" "$FRR_REF" /src/frr
+
+FROM build-deps AS source-local
+WORKDIR /src/frr
+COPY --from=frr_source . .
+# FRR's own .dockerignore excludes .git; preserve it through a separate context.
+COPY --from=frr_git . .git/
+
+FROM source-${FRR_SOURCE_MODE} AS source
+ARG FRR_REPOSITORY=https://github.com/nanfengnan1/frr.git
+ARG FRR_REF=frr-10.7.0
+WORKDIR /src/frr
+COPY vpp/source-metadata.py /build-tools/source-metadata.py
+RUN python3 /build-tools/source-metadata.py frr /src/frr /source-metadata "$FRR_REPOSITORY" "$FRR_REF"
+
+FROM source AS build
+ARG BUILD_JOBS=12
+RUN ./bootstrap.sh && ./configure \
+    --prefix=/usr --sbindir=/usr/lib/frr --sysconfdir=/etc \
+    --localstatedir=/var --libdir=/usr/lib --enable-user=frr \
+    --enable-group=frr --enable-vty-group=frrvty --enable-vtysh \
+    --enable-fpm --enable-multipath=64 --enable-pcre2posix --disable-doc \
+    && make -j "${BUILD_JOBS}" && make DESTDIR=/install install \
+    && mkdir -p /install/etc/frr /install/usr/share/frr \
+    && cp tools/etc/frr/daemons /install/etc/frr/daemons \
+    && cp docker/alpine/docker-start /install/usr/lib/frr/docker-start \
+    && chmod 755 /install/usr/lib/frr/docker-start \
+    && sed -i 's/^bgpd=no$/bgpd=yes/' /install/etc/frr/daemons \
+    && cp /source-metadata/source-commit /source-metadata/source.json /source-metadata/source.patch /install/usr/share/frr/ \
+    && cp COPYING /install/usr/share/frr/COPYING \
+    && find /install -type f -name '*.a' -delete \
+    && rm -rf /install/usr/include /install/usr/lib/pkgconfig
+RUN scanelf --needed --nobanner --format '%n#p' --recursive /install \
+      | tr ',' '\n' | sort -u > /needed-libraries \
+    && while IFS= read -r lib; do \
+         [ -n "$lib" ] || continue; \
+         if ! find /install -name "$lib" -print -quit | grep -q .; then \
+           printf 'so:%s\n' "$lib"; \
+         fi; \
+       done < /needed-libraries > /runtime-dependencies
+FROM alpine:${ALPINE_VERSION}
+ARG FRR_REPOSITORY=https://github.com/nanfengnan1/frr.git
+ARG FRR_REF=frr-10.7.0
+LABEL org.opencontainers.image.title="FRRouting on Alpine" \
+      org.opencontainers.image.source="${FRR_REPOSITORY}" \
+      io.sdn.source.ref="${FRR_REF}"
+COPY --from=build /runtime-dependencies /tmp/runtime-dependencies
+RUN apk add --no-cache bash python3 tini iproute2 iputils tcpdump \
+      ca-certificates $(cat /tmp/runtime-dependencies) \
+    && rm /tmp/runtime-dependencies \
+    && addgroup -S frr && addgroup -S frrvty \
+    && adduser -S -D -H -h /var/run/frr -G frr -s /sbin/nologin frr \
+    && addgroup frr frrvty && mkdir -p /var/run/frr
+COPY --from=build /install/ /
+COPY frr.conf /etc/frr/frr.conf
+COPY vtysh.conf /etc/frr/vtysh.conf
+RUN chown -R frr:frr /etc/frr /var/run/frr \
+    && chmod 640 /etc/frr/frr.conf /etc/frr/vtysh.conf
+HEALTHCHECK --interval=10s --timeout=5s --start-period=30s \
+    CMD vtysh -c 'show version' >/dev/null 2>&1 || exit 1
+ENTRYPOINT ["/sbin/tini", "--"]
+CMD ["/usr/lib/frr/docker-start"]

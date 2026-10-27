@@ -21,7 +21,7 @@ AI 可以发现工具、查询节点状态和任务；部署者显式启用写�
    sdn-agent-mcp (default: read-only tools)
         | fixed endpoint + SDN_TOKEN + gRPC TLS
         v
-   sdn-agent -> validation / transaction / journal -> Linux / FRR adapters
+   sdn-agent -> validation / transaction / journal -> Linux or VPP composite + FRR
 
 MCP 进程可以运行在能访问 Agent 的客户端主机上，也可以在 Agent 容器内通过 docker exec
 启动。它不拥有独立的配置数据库；事务、任务、幂等记录和 Undo 仍由 Agent 保存。
@@ -35,7 +35,8 @@ MCP 进程可以运行在能访问 Agent 的客户端主机上，也可以在 Ag
 构建、安装和客户端配置
 ------------------------------------------------------------
 
-构建需要 Go 1.25+、模块依赖及可选 GNU Make；运行二进制不需要 Go、Node.js 或 Python。
+构建需要 Go 1.25+、模块依赖及可选 GNU Make；运行 MCP 二进制不需要 Go、Node.js 或 Python。
+目标节点选择 VPP 时，其 Agent 镜像仍需要配套 Python 适配进程；MCP 不直接连接该进程。
 源码在同一仓库的 mcp/，没有独立的 go.mod：
 
 .. code-block:: bash
@@ -184,15 +185,18 @@ MCP 不读取 agent.conf 中的 token；仅通过文件配置凭据的部署应�
      - base_revision、request_id、operations
      - 顺序完成 Begin、Stage、Commit，返回 transaction 与 task
 
-先调用 MCP ``tools/list`` 获取实际 schema。字段使用 ``snake_case``，
+先调用 MCP ``tools/list`` 获取实际 schema。Protobuf 请求和响应字段使用 ``snake_case``，
+``records`` 内的后端原生字段保留原名，例如 VPP 的 ``vppName``、``swIfIndex``、``remoteCount``。
 所有 64 位版本、序号使用十进制字符串，例如 ``"base_revision":"0"``。
 Operation 使用公开 Protobuf 的枚举和类型化 payload，不接受 shell 命令或本地文件路径。
 optional 字段的未提供、false 和 0 含义不同；例如省略 mtu 不表示把 MTU 设置为 0。
 合法工具调用的结果通过 structuredContent 和兼容的文本内容返回，
 工具错误会标识 isError；仍需检查 Task.state 和验证结果中的业务状态。
 每次工具 arguments 最多 1 MiB，操作数组最多 1000 项。sdn_verify 返回 verified=false 时
-同时标记工具错误，验证信息仍保留；sdn_state 的 observation_error 和 sdn_query 的 error/stale
-应由调用方单独检查，不能只判断 MCP 消息是否成功返回。
+同时标记工具错误，验证信息仍保留。sdn_state 的 observation_error 非空，或
+sdn_query 的 error 非空 / stale=true 时，也返回 isError=true、code=FailedPrecondition，
+同时保留原始状态、records、source、revision 等证据。不能把同步暂停、过期数据或
+不完整观测当成健康空表；这项错误标记适用于 Linux、VPP 和 FRR。
 request_id、transaction_id、task_id 最长 256 个字符且不能全为空白。
 gRPC 失败只返回状态 code 和通用 message，不把任意上游诊断字符串直接传给模型；
 需要细节时按任务 ID 查询状态或查看 Agent 日志。
@@ -219,6 +223,110 @@ gRPC 失败只返回状态 code 和通用 message，不把任意上游诊断字�
 查询响应包含来源、采集时间、records、错误和分页信息；stale 或 error 不能当成正常空表。
 继续查询时保持筛选不变并传回 next_page_token；实际数据变化导致游标失效时重新开始查询，
 不能把旧页与新页静默拼接。具体查询分类见 :doc:`resources`。
+
+VPP、双栈 VXLAN 与 EVPN
+------------------------------------------------------------
+
+MCP 沿用相同的六个读工具和六个事务工具。数据面由目标 Agent 的 agent.conf 选择，
+不是 MCP 参数；调用前先检查 sdn_capabilities 的 operations/backends、queries 和 features。
+当前 VPP 节点包含 dataplane/vpp-26.06、evpn-irb/v1、vxlan-multipoint/v1、
+vxlan-dualstack/v1、vxlan-software-gso/v1 等特征；这些特征不表示硬件隧道卸载已验收。
+tools/list 展示公共协议及参数说明，实际节点能力与 Agent 校验决定哪些操作能执行。
+
+.. list-table:: 查询分工
+   :header-rows: 1
+   :widths: 42 18 40
+
+   * - 查询 kind
+     - VPP 节点上的 source
+     - 用途
+   * - TENANTS、BRIDGES、PORTS、INTERFACES
+     - vpp
+     - 租户、BD、绑定端口、LCP/BVI/VXLAN 接口
+   * - ADDRESSES、ROUTES、FDB、NEIGHBORS
+     - vpp
+     - 原生地址、租户 FIB、MAC 和邻居状态
+   * - VXLAN_TUNNELS
+     - vpp
+     - VNI、原生接口索引、多点标记、单播远端和 BUM 成员
+   * - EVPN_ROUTES、EVPN_VNI、BGP/OSPF 查询
+     - frr
+     - 控制面的协议状态与选路；不是 VPP 已完成转发的证明
+
+以下查询使用既有资源名称和示例地址，按实际节点替换：
+
+.. code-block:: json
+
+   {"name":"sdn_query","arguments":{"kind":"VXLAN_TUNNELS","family":"IPV6","vrf":"TENANT-A","bridge":"br50000","neighbor":"2001:db8::2","page_size":100}}
+
+.. code-block:: json
+
+   {"name":"sdn_query","arguments":{"kind":"ROUTES","family":"IPV4","vrf":"TENANT-A","prefix":"192.168.20.12/32"}}
+
+.. code-block:: json
+
+   {"name":"sdn_query","arguments":{"kind":"FDB","bridge":"br50000"}}
+
+.. code-block:: json
+
+   {"name":"sdn_query","arguments":{"kind":"EVPN_ROUTES","route_type":2}}
+
+VXLAN_TUNNELS 的 family 选择 **外层 VTEP 地址族**，两种外层都可以承载内层双栈。
+neighbor 是远端 VTEP 筛选；匹配后返回该隧道的完整 remotes 列表。
+remoteCount 是不同远端地址数，bumCount 是 BUM 项数；一个远端可同时有 MAC 单播项和 BUM 项。
+bridge 是受管逻辑名称，不是数值 BD ID；接口名以查询结果为准，不能把临时 swIfIndex 当持久标识。
+远端成员变化可能使分页游标失效，收到 Aborted 后重新读取第一页。
+
+sdn_state 的 observations 中，``vpp/status`` 保留适配器 JSON 字符串。
+其中 paused 或 lastError 会被 Agent 汇总到 observation_error，MCP 将结果标为错误并保留证据。
+恢复应遵循原事务 Undo / RetryRollback，不能通过新建事务或删除状态文件绕过恢复屏障。
+
+VPP 配置使用既有 typed operations。以下是在已 Begin 的候选中创建 IPv6 源端 VNI 的片段，
+前提是本地 VTEP/underlay 与名为 uplink 的 LCP 接口已经准备好：
+
+.. code-block:: json
+
+   {
+     "name":"sdn_stage",
+     "arguments":{
+       "transaction_id":"<已有候选ID>",
+       "operations":[
+         {"id":"vx10010","code":"VXLAN","action":"CREATE",
+          "vxlan":{"name":"vx10010","vni":10010,"local":"2001:db8::1",
+                   "underlay":"uplink","learning":false}}
+       ]
+     }
+   }
+
+local 就是 src，没有 dst/remote/is_l3 参数；远端由 EVPN 动态维护。片段只创建 VNI 接口，
+仍需配置 BD 绑定、接入口和 FRR。跨网段依次准备租户、业务 BD/BVI、网关地址、
+传输 BD/BVI 的 Router MAC、L3VNI VXLAN 端口、TENANT_L3VNI 绑定和 FRR RD/RT/EVPN。
+配置依赖通过 depends_on 表达，完整操作顺序见 :doc:`vpp` 和 lab/vpp_irb.py。
+VXLAN 端口使用 learning=false；需要远端 ARP/ND 抑制时设置 neigh_suppress=true。
+VPP 不支持 STP，也不支持租户内部 BGP/OSPF 的 BVI punt 会话，Agent 会拒绝这些操作。
+
+启动配置与 MCP 的边界
+------------------------------------------------------------
+
+容器允许外部挂载 agent.conf、VPP startup.conf 和 FRR 配置，见 :doc:`configuration`
+与 :doc:`vpp`。这不表示 MCP 可以读写这些文件。
+
+.. list-table:: 配置入口
+   :header-rows: 1
+
+   * - 内容
+     - 当前入口
+   * - 租户、BD、VXLAN、地址、路由、FRR EVPN
+     - MCP typed operations，经 Agent 事务校验和执行
+   * - VPP CPU、内存、插件、DPDK PCI、API socket
+     - 宿主机挂载 startup.conf，vpp.startupConfig 指定路径；重启后生效
+   * - 数据面选择、容器设备映射、hugepages、容器重启
+     - 部署配置；没有对应 MCP RPC
+   * - 任意 shell、vppctl、文件编辑或上传
+     - 没有通用执行工具
+
+本次更新后重新构建 MCP 二进制并重连客户端以刷新工具说明。容器内运行时需更新包含
+新二进制的镜像；仅更新 MCP 客户端程序无需重启目标 Agent，也不会改变其已受理任务。
 
 独立节点的配置事务
 ------------------------------------------------------------
@@ -250,7 +358,7 @@ gRPC 失败只返回状态 code 和通用 message，不把任意上游诊断字�
      }
    }
 
-Stage 通过表示候选校验通过，还没有配置 Linux/FRR。确认目标与依赖后提交：
+Stage 通过表示候选校验通过，还没有配置 Linux、VPP 或 FRR。确认目标与依赖后提交：
 
 .. code-block:: json
 
@@ -306,5 +414,6 @@ sdn_retry_rollback 的语义与 CLI 相同，见 :doc:`transactions`。
 MCP 进程本身不保存会话恢复数据库；客户端应保留业务请求键、事务 ID、任务 ID 和游标。
 重启后重新连接同一 Agent 身份并查询原任务，不生成空状态假定原配置消失。
 
-MCP 适配测试验证协议、字段、认证转发和任务调用链；真实 Linux/FRR 配置、
+MCP 适配测试验证协议、字段、认证转发和任务调用链；新增测试还经过真实 Agent、
+VPP Go Driver 和模拟适配器的 Unix HTTP 链路。真实 Linux/VPP/FRR 配置、
 协议收敛和业务转发仍需要独立验证。工具调用成功不构成这些验收证据。

@@ -133,3 +133,21 @@ func TestDockerDefaultUsesDurableLocalRedis(t *testing.T) {
 		t.Fatalf("unexpected image defaults: %+v", o.Redacted())
 	}
 }
+
+func TestDataplaneSelection(t *testing.T) {
+	name := confFile(t, "{\"agent\":{\"dataplane\":\"vpp\",\"insecure\":true}}")
+	o, err := Parse([]string{"-config", name}, environment(envToken, true), io.Discard)
+	if err != nil || o.Agent.Dataplane != "vpp" || o.VPP.APISocket != "/run/vpp/api.sock" {
+		t.Fatalf("VPP config: %v %+v", err, o.Redacted())
+	}
+	for _, body := range []string{
+		"{\"agent\":{\"dataplane\":\"auto\"}}",
+		"{\"agent\":{\"dataplane\":\"vpp\",\"frr\":false}}",
+		"{\"agent\":{\"dataplane\":\"vpp\"},\"vpp\":{\"apiSocket\":\"relative\"}}",
+		"{\"agent\":{\"dataplane\":\"vpp\"},\"vpp\":{\"startupTimeoutSeconds\":0}}",
+	} {
+		if _, err = Parse([]string{"-config", confFile(t, body), "-insecure"}, environment(envToken, true), io.Discard); err == nil {
+			t.Fatalf("invalid VPP configuration accepted: %s", body)
+		}
+	}
+}

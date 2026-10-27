@@ -8,6 +8,10 @@ Docker 部署单元另外包含 Redis 和 FRR 守护进程，由 tini + Python �
 配置流程是读取 agent.conf → Go 合并 CLI/env 并校验 → 输出去掉 token 的服务参数 →
 Redis/FRR 就绪 → Agent。配置未通过校验前不会创建运行目录或启动子服务。
 
+这是默认 Linux 数据面的启动与分层。VPP 模式复用相同事务层，由 VPP composite
+协调 Linux 控制面镜像与本地 Python/Binary API 适配器；集成镜像另外监督 VPP 和适配器。
+FRR/Zebra、Netlink、LCP、EVPN 映射与二层/三层报文流程见 :doc:`vpp`。
+
 分层架构
 --------
 
@@ -81,6 +85,10 @@ Redis/FRR 就绪 → Agent。配置未通过校验前不会创建运行目录或
      - bridge / VRF / VXLAN 等内核对象和实际状态回读。
    * - ``internal/adapters/frr``
      - OSPF / BGP / EVPN、配置快照与验证。
+   * - ``internal/adapters/vpp``
+     - 复用 Linux 语义与 Undo，调用本地适配器下发、验证和查询 VPP；与独立 Linux Driver 互斥注册。
+   * - VPP 仓库 ``extras/sdn-agent``
+     - Python 适配器与 IRB，同步受管 Linux EVPN 状态、VPP BD/BVI/FIB/多点 VXLAN。
    * - ``internal/store``
      - Redis 与持久文件的 Load / Atomic / Keys。
    * - ``cmd/sdnctl``、``cmd/mock-controller``、``lab``

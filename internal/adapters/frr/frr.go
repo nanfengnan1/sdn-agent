@@ -437,6 +437,12 @@ func (d *Driver) cli(ctx context.Context, commands ...string) (string, error) {
 	}
 	for _, l := range strings.Split(out, "\n") {
 		s := strings.TrimSpace(l)
+		// FRR 10.7 mgmtd emits this informational banner after a successful
+		// commit (for example L3VNI before BGP starts). Keep checking all
+		// following lines and verify the actual running configuration.
+		if s == "% Configuration applied with notes:" {
+			continue
+		}
 		if (strings.HasPrefix(s, "%") && !strings.Contains(s, "No changes")) || strings.HasPrefix(s, "This command is only supported") || strings.HasPrefix(s, "ERROR:") {
 			return out, fmt.Errorf("FRR rejected command: %s", s)
 		}

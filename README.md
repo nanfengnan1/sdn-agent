@@ -1,12 +1,18 @@
 # sdn-agent
 
+新增 **VPP + FRR EVPN 实验模式**：配置选择 Linux 或 VPP，支持租户 FIB、BD/BVI、L2VNI/L3VNI、对称 IRB，以及 FRR Type-2、Type-3、Type-5 到 VPP 的同步。Linux 保留控制面镜像，业务转发在 VPP。原生多点 VXLAN 每个 VNI 一个接口，创建时只指定本地 `src`，EVPN 动态维护 MAC→VTEP 与 BUM 复制成员；支持外层和内层 IPv4/IPv6、软件 TCP GSO 分段及校验和处理。Web 可通过 Controller 查询原生接口、路由和远端映射。集成开发镜像为 `alpine/sdn-agent:vpp-dev`，硬件 VXLAN TSO/LRO 与生产性能尚未验收。构建、隔离验收和恢复限制见 [VPP 用户手册](docs/user/vpp.rst) 与 [适配实现](docs/developer/vpp.rst)。
+
+VPP/FRR 源码构建支持选择 `nanfengnan1/vpp`、`nanfengnan1/frr` 的 tag、分支或 commit，也可使用本地未提交源码。首次设置 `BUILD_BASES=1`，用 `VPP_REF`、`FRR_REF` 选择远端版本；镜像标签与源码版本分开配置。VPP 原生插件与 Python 适配器随同一基础镜像打包。**适配代码推送后的完整 GitHub 构建尚待验证**；具体命令、兼容基线及完整转发图见上述文档。
+
 `sdn-agent` 是用 Go 编写的**本地数据面管理代理**。它接收 Controller 或 CLI 通过 Protobuf/gRPC 提交的配置事务，将统一网络操作交给适配器执行，负责配置下发、状态回读、失败回滚和任务恢复。
 
-项目通过统一的 Driver 接口扩展不同数据面和执行后端。**当前实现 Linux 和 FRR 适配器**：Linux 适配器管理内核中的接口、地址、路由、桥域、VRF 和 VXLAN；FRR 适配器管理路由协议配置，配合数据面完成网络功能。开发新的数据面适配器时，可按[适配器扩展流程](docs/developer/adapters.rst)实现接口、注册能力并补齐测试。
+项目通过统一的 Driver 接口扩展不同数据面和执行后端。**默认使用 Linux 和 FRR 适配器，可选 VPP EVPN 模式**：Linux 适配器管理内核中的接口、地址、路由、桥域、VRF 和 VXLAN；FRR 适配器管理路由协议配置。VPP 模式由 composite 适配器协调 Linux 控制面镜像和 VPP 实际转发。开发新的适配器时，可按[扩展流程](docs/developer/adapters.rst)实现接口、注册能力并补齐测试。
 
 **支持版本：** 当前已验证 Linux/amd64，内核基线为 `6.8.0-138-generic`；Docker 宿主机为 Ubuntu 22.04.5 LTS，Agent 容器为 Alpine 3.22.6，FRR 为 **10.2.2**。FRR **10.0.0** 镜像另有历史回归记录。它们是已验证组合，不是最低版本或所有更高版本的兼容承诺；完整范围见[用户安装手册](docs/user/installation.rst)的“支持平台与 Linux / FRR 版本”。
 
 支持 AI 通过 **MCP** 调用：[`mcp/`](mcp/README.md) 提供独立的 `sdn-agent-mcp` stdio 服务，复用 Agent gRPC。默认开放能力、状态、查询、验证和任务读取；使用 `-allow-writes` 后可提交事务或重试回滚。运行 `make build-mcp` 构建，接入和调用示例见 [MCP 用户手册](docs/user/mcp.rst)，实现边界及扩展流程见 [MCP 设计](docs/developer/mcp.rst)。
+
+MCP 已同步 VPP 的多点 VXLAN、双栈查询和租户/L3VNI 参数说明，沿用现有事务工具；实际能力由目标 Agent 声明。同步异常、过期查询会标为工具错误并保留证据。VPP `startup.conf` 继续通过外部挂载配置，MCP 不提供启动文件编辑或容器重启。
 
 默认 Docker 部署现在将 **Agent、Redis、FRR 集成在同一个容器**。使用 [`docker/agent.conf`](docker/agent.conf) 配置应用和内置 Redis，支持只读挂载到 `/etc/sdn-agent/agent.conf` 覆盖；原生 CLI 保持兼容。详见 [统一配置手册](docs/html/user/configuration.html) 与 [Docker 操作](docker/README.md)。
 
@@ -152,6 +158,6 @@ Redis 的 Candidate、Running、Operational、Task 使用同一 Redis DB 内的�
 
 ## 版本范围
 
-v1 实现本实验需要的 Linux + FRR 配置链路。暂未实现 VPP/交换机插件、独立进程 Adapter 注册协议、FPM/ZAPI 接收器、ARP/ND 主动保活、全网拓扑聚合、资源级自动差异规划，以及主机重启后全部 Linux 配置自动重建。Agent 进程重启会恢复任务日志；管理断线不会主动清除网络配置。
+v1 实现本实验需要的 Linux + FRR 配置链路。暂未实现交换机插件、独立进程 Adapter 注册协议、FPM/ZAPI 接收器、ARP/ND 主动保活、全网拓扑聚合、资源级自动差异规划，以及主机重启后全部 Linux 配置自动重建。Agent 进程重启会恢复任务日志；管理断线不会主动清除网络配置。
 
 运行数据、token、二进制和测试产物保存在被 Git 忽略的 `lab/state/`、`bin/`、`artifacts/`，不应作为源码提交。

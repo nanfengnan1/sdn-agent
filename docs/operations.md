@@ -2,6 +2,8 @@
 
 `Operation = id + code + action + depends_on + typed oneof data`。参数使用 Protobuf 类型；可选字段具有 presence，未给字段不会被当作 false/0 覆盖。当前注册表在进程启动时固定注册 Go Driver，不支持任意远程代码 callback。
 
+下表后端列描述默认 Linux 模式。选择 `agent.dataplane=vpp` 后，网络操作由 VPP composite Driver 同时管理 Linux 控制面镜像和 VPP 数据面，协议操作仍由 FRR 执行。支持租户、BD/BVI、L2VNI/L3VNI 和原生 src-only 多点 VXLAN；VXLAN 操作字段不变，每个 VNI 一个接口，远端由 EVPN 动态下发。VPP 模式的限制与操作流程见 [VPP 用户手册](user/vpp.rst)，以节点 Capabilities 为准。
+
 | 编号 / code | data | 支持行为 | 后端 | 主要参数 |
 |---|---|---|---|---|
 | 1 NODE_NETWORK | network | SET | Linux | 白名单 sysctl 列表；optional 允许内核不存在对应项 |
@@ -51,6 +53,6 @@ BGP instance → peer/group → EVPN activate → RD/RT
 
 删除时先撤销 FRR 引用、解除端口/租户绑定、移除地址，再删除 VXLAN / BD / VRF。适配器拒绝删除仍有 master、成员或非 link-local 地址的设备。v1 面向自己创建的简单 bridge/VRF/VXLAN；复杂 VLAN-aware bridge、多播 VXLAN、外部元数据 VXLAN 等不在可完整恢复的删除范围内。
 
-静态 MAC、VLAN-aware bridge、多归属 ESI、BFD、ACL、VPP/交换机 API 等不在当前协议能力中；未知 code 或不匹配的 oneof 会被拒绝，不能降级成原始 shell/CLI。Type-5、OSPFv3 与结构化查询示例见 [资源手册](user/resources.rst)。
+静态 MAC、VLAN-aware bridge、多归属 ESI、BFD、ACL、任意交换机 API 等不在当前协议能力中；未知 code 或不匹配的 oneof 会被拒绝，不能降级成原始 shell/CLI。Type-5、OSPFv3 与结构化查询示例见 [资源手册](user/resources.rst)。
 
 参考：[FRR 10 EVPN 文档](https://docs.frrouting.org/en/stable-10.0/evpn.html)。本版实际兼容结果以固定实验镜像和回归报告为准。

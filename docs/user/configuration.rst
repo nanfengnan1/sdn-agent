@@ -3,11 +3,12 @@ agent.conf 与容器内服务
 
 每个 Agent 容器运行自己的 Agent、Redis 和 FRR。Redis 不再需要单独的服务容器；
 它只监听容器内的 loopback 地址。``agent.conf`` 同时描述 Agent 参数与内置 Redis 参数。
+VPP 集成镜像还包含 VPP 和本地适配器，启动参数与设备准备见 :doc:`vpp`。
 
 配置文件格式与优先级
 ------------------------------------------------------------
 
-文件名使用 ``.conf``，内容是严格 JSON。当前顶层仅接受 ``agent``、``redis``；
+文件名使用 ``.conf``，内容是严格 JSON。当前顶层接受 ``agent``、``redis``、``vpp``；
 未知字段、重复键、null、错误类型、超出范围的端口和不匹配的内置 Redis 地址都会拒绝启动。
 不支持注释、环境变量模板或任意 shell 命令。
 
@@ -49,6 +50,12 @@ agent.conf 与容器内服务
 正式 TLS 设置使用 ``agent.cert``、``agent.key``、``agent.ca``，并把 insecure 设为 false。
 配置里的路径都是容器内路径，相应证书需要另外只读挂载。FRR 路由配置仍由事务操作和
 ``/etc/frr`` 管理，不把 BGP 配置文本塞进 agent.conf。
+
+``agent.dataplane`` 默认为 ``linux``；设为 ``vpp`` 时要求 ``agent.frr=true``，
+并使用匹配的 VPP 集成镜像。``vpp`` 配置 ``startupConfig``、``apiSocket``、
+``adapterSocket`` 和 ``startupTimeoutSeconds``，完整模板为 ``docker/vpp/agent.conf``。
+``apiSocket`` 必须与 VPP 启动文件的 Binary API socket 一致。数据面切换需要重启，
+已存在的任务和配置状态绑定原数据面，不能将同一状态目录直接切换后端。
 
 从容器外挂载覆盖
 ------------------------------------------------------------
@@ -108,6 +115,8 @@ agent.conf 与容器内服务
      - 内置 Redis 的 AOF/RDB，保存本节点 Candidate/Running/Operational/Task
    * - /etc/frr
      - FRR 配置
+   * - /var/lib/sdn-agent/vpp.json
+     - VPP 模式的受管期望模型与中断恢复信息；不是动态 EVPN 表或完整冷启动快照
 
 首次启动仍生成 UUID 并与 Controller 协商，最终身份写入 identity.json。
 agent.conf 不包含手填 node-id；网络操作请求中的 nodeId 使用注册后的 UUID。
@@ -123,6 +132,10 @@ dataDir 必须是 Redis 专用绝对目录，不能与 Agent 状态目录重叠�
 停止时先给 Agent 最多 120 秒完成退出/补偿，再停止 FRR 和 Redis；默认 Docker 示例使用
 240 秒 stop timeout。若增加 Redis shutdownTimeoutSeconds，应相应增加容器停止预算。
 健康检查验证 Agent 监听、内置 Redis PING 和 FRR 进程状态。
+
+上述为 Linux 模式。VPP 模式还监督 VPP 与适配器，先等待 Binary API 和适配器就绪；
+停止顺序为 Agent → 适配器 → FRR → VPP → Redis。
+健康检查同时检查 VPP API 和适配器状态，持久化与冷启动边界见 :doc:`vpp`。
 
 默认 appendOnly=true、appendFsync=always。选择 everysec/no 或关闭 AOF 会降低断电后的日志保证，
 不能把它当作与默认设置等价的持久化。Redis 密码/TLS 接入当前未实现，内置 bind 只接受 loopback IP。

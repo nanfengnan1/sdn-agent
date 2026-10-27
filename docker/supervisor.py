@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Supervise the Agent, its local Redis and its dedicated FRR instance."""
+
 import json
 import os
 from pathlib import Path
@@ -12,9 +13,10 @@ import subprocess
 import sys
 import time
 
-RUNTIME = Path('/run/sdn-agent/runtime.json')
-DEFAULT_CONFIG = '/etc/sdn-agent/agent.conf'
-FRR_INIT = '/usr/lib/frr/frrinit.sh'
+RUNTIME = Path("/run/sdn-agent/runtime.json")
+DEFAULT_CONFIG = "/etc/sdn-agent/agent.conf"
+FRR_INIT = "/usr/lib/frr/frrinit.sh"
+VPP_ADAPTER = "/usr/local/lib/sdn-agent/vpp/adapter.py"
 stopping = False
 
 
@@ -175,6 +177,34 @@ def prepare_frr():
     daemons.write_text(content)
 
 
+def vpp_ready(config):
+    try:
+        p = subprocess.run(
+            [
+                "python3",
+                VPP_ADAPTER,
+                "--socket",
+                config["vpp"]["adapterSocket"],
+                "--health",
+            ],
+            capture_output=True,
+            timeout=7,
+        )
+        return p.returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
+def vpp_api_ready(config):
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+            client.settimeout(1)
+            client.connect(config["vpp"]["apiSocket"])
+        return True
+    except OSError:
+        return False
+
+
 def write_runtime(config, agent, redis):
     data = {'config': config, 'agentPid': agent.pid, 'redisPid': redis.pid if redis else None}
     temp = RUNTIME.with_suffix('.tmp')
@@ -197,12 +227,19 @@ def stop_child(child, timeout):
 def healthcheck():
     try:
         state = json.loads(RUNTIME.read_text())
-        config = state['config']
-        if not process_alive(state['agentPid'], 'sdn-agent') or not tcp_ready(config['agent']['listen']):
+        config = state["config"]
+        if not process_alive(state["agentPid"], "sdn-agent") or not tcp_ready(
+            config["agent"]["listen"]
+        ):
             return 1
-        if config['redis']['enabled'] and (not process_alive(state['redisPid'], 'redis-server') or not redis_ready(config['redis'])):
+        if config["redis"]["enabled"] and (
+            not process_alive(state["redisPid"], "redis-server")
+            or not redis_ready(config["redis"])
+        ):
             return 1
-        if config['agent']['frr'] and not frr_ready():
+        if config["agent"]["frr"] and not frr_ready():
+            return 1
+        if config["agent"].get("dataplane", "linux") == "vpp" and not vpp_ready(config):
             return 1
         return 0
     except (OSError, ValueError, KeyError, TypeError):
@@ -210,13 +247,13 @@ def healthcheck():
 
 
 def main(args):
-    if args == ['--healthcheck']:
+    if args == ["--healthcheck"]:
         return healthcheck()
-    if args and not args[0].startswith('-'):
+    if args and not args[0].startswith("-"):
         os.execvp(args[0], args)
     args = effective_args(args)
     if utility_only(args):
-        os.execvp('sdn-agent', ['sdn-agent', *args])
+        os.execvp("sdn-agent", ["sdn-agent", *args])
     # Validate before creating directories, starting Redis/FRR, or touching data.
     config = validated_config(args)
     signal.signal(signal.SIGTERM, request_stop)
@@ -224,58 +261,115 @@ def main(args):
     RUNTIME.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     os.chmod(RUNTIME.parent, 0o700)
     RUNTIME.unlink(missing_ok=True)
-    redis = agent = None
+    redis = agent = vpp = adapter = None
     frr_started = False
     result = 1
     try:
-        if config['redis']['enabled']:
-            account = prepare_redis(config['redis'])
-            redis = subprocess.Popen(redis_command(config['redis']), user=account.pw_uid,
-                                     group=account.pw_gid, extra_groups=[])
-            wait_ready(lambda: redis_ready(config['redis']), config['redis']['startupTimeoutSeconds'], 'Redis', (redis,))
-        if config['agent']['frr']:
+        if config["redis"]["enabled"]:
+            account = prepare_redis(config["redis"])
+            redis = subprocess.Popen(
+                redis_command(config["redis"]),
+                user=account.pw_uid,
+                group=account.pw_gid,
+                extra_groups=[],
+            )
+            wait_ready(
+                lambda: redis_ready(config["redis"]),
+                config["redis"]["startupTimeoutSeconds"],
+                "Redis",
+                (redis,),
+            )
+        if config["agent"].get("dataplane", "linux") == "vpp":
+            settings = config["vpp"]
+            if (
+                not Path(settings["startupConfig"]).is_file()
+                or not Path(VPP_ADAPTER).is_file()
+            ):
+                raise RuntimeError(
+                    "VPP startup configuration/adapter missing; use the VPP bundle image"
+                )
+            Path("/run/vpp/log").mkdir(parents=True, exist_ok=True)
+            vpp = subprocess.Popen(["vpp", "-c", settings["startupConfig"]])
+            wait_ready(
+                lambda: vpp_api_ready(config),
+                settings["startupTimeoutSeconds"],
+                "VPP",
+                (vpp,),
+            )
+            adapter = subprocess.Popen(
+                [
+                    "python3",
+                    VPP_ADAPTER,
+                    "--socket",
+                    settings["adapterSocket"],
+                    "--api",
+                    settings["apiSocket"],
+                    "--state",
+                    str(Path(config["agent"]["stateDir"]) / "vpp.json"),
+                ]
+            )
+            wait_ready(
+                lambda: vpp_ready(config),
+                settings["startupTimeoutSeconds"],
+                "VPP adapter",
+                (vpp, adapter),
+            )
+        if config["agent"]["frr"]:
             prepare_frr()
             frr_started = True
-            subprocess.run([FRR_INIT, 'start'], check=True, timeout=40)
-            wait_ready(frr_ready, 30, 'FRR', (redis,) if redis else ())
-        agent = subprocess.Popen(['sdn-agent', *args])
-        children = tuple(child for child in (agent, redis) if child is not None)
-        wait_ready(lambda: tcp_ready(config['agent']['listen']), 45, 'Agent', children)
+            subprocess.run([FRR_INIT, "start"], check=True, timeout=40)
+            wait_ready(frr_ready, 30, "FRR", (redis,) if redis else ())
+        agent = subprocess.Popen(["sdn-agent", *args])
+        children = tuple(
+            child for child in (agent, redis, vpp, adapter) if child is not None
+        )
+        wait_ready(lambda: tcp_ready(config["agent"]["listen"]), 45, "Agent", children)
         write_runtime(config, agent, redis)
-        print('sdn-agent bundle ready (Agent, Redis/FRR according to configuration)', flush=True)
+        print(
+            "sdn-agent bundle ready (dataplane="
+            + config["agent"].get("dataplane", "linux")
+            + ")",
+            flush=True,
+        )
         next_probe = time.monotonic()
         while not stopping:
             if any(child.poll() is not None for child in children):
-                raise RuntimeError('required Agent/Redis process exited')
+                raise RuntimeError("required Agent/Redis/VPP/adapter process exited")
             if time.monotonic() >= next_probe:
-                if config['agent']['frr'] and not frr_ready():
-                    raise RuntimeError('required FRR process is unavailable')
-                if redis and not redis_ready(config['redis']):
-                    raise RuntimeError('required Redis service is unavailable')
+                if config["agent"]["frr"] and not frr_ready():
+                    raise RuntimeError("required FRR process is unavailable")
+                if redis and not redis_ready(config["redis"]):
+                    raise RuntimeError("required Redis service is unavailable")
+                if vpp and not vpp_ready(config):
+                    raise RuntimeError("required VPP adapter/API is unavailable")
                 next_probe = time.monotonic() + 3
             time.sleep(0.2)
         result = 0
     except InterruptedError:
         result = 0
     except Exception as error:
-        print(f'sdn-agent bundle failed: {error}', file=sys.stderr, flush=True)
+        print(f"sdn-agent bundle failed: {error}", file=sys.stderr, flush=True)
     finally:
         RUNTIME.unlink(missing_ok=True)
         # Keep the journal and network backend available while Agent drains its
         # active task/rollback. Container stop_grace_period must allow this wait.
         stop_child(agent, 120)
+        if adapter:
+            stop_child(adapter, 15)
         if frr_started:
             try:
-                subprocess.run([FRR_INIT, 'stop'], check=False, timeout=30)
+                subprocess.run([FRR_INIT, "stop"], check=False, timeout=30)
             except subprocess.TimeoutExpired:
-                print('FRR shutdown timed out', file=sys.stderr, flush=True)
-        stop_child(redis, config['redis']['shutdownTimeoutSeconds'])
+                print("FRR shutdown timed out", file=sys.stderr, flush=True)
+        if vpp:
+            stop_child(vpp, 30)
+        stop_child(redis, config["redis"]["shutdownTimeoutSeconds"])
     return result
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     try:
         sys.exit(main(sys.argv[1:]))
     except Exception as error:
-        print(f'sdn-agent startup rejected: {error}', file=sys.stderr, flush=True)
+        print(f"sdn-agent startup rejected: {error}", file=sys.stderr, flush=True)
         sys.exit(1)

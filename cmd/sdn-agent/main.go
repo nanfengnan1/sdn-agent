@@ -14,6 +14,7 @@ import (
 	pb "sdn-agent/api/agent/v1"
 	"sdn-agent/internal/adapters/frr"
 	"sdn-agent/internal/adapters/linux"
+	"sdn-agent/internal/adapters/vpp"
 	"sdn-agent/internal/agent"
 	"sdn-agent/internal/backend"
 	"sdn-agent/internal/config"
@@ -91,7 +92,16 @@ func run() error {
 		return e
 	}
 	drivers := []backend.Driver{&linux.Driver{Runner: backend.Exec{}}}
-	if *useFRR {
+	if opts.Agent.Dataplane == "vpp" {
+		client := vpp.NewClient(opts.VPP.AdapterSocket)
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		err := client.Call(ctx, "health", nil, nil)
+		cancel()
+		if err != nil {
+			return err
+		}
+		drivers = []backend.Driver{&vpp.Driver{Linux: &linux.Driver{Runner: backend.Exec{}}, RPC: client}, &vpp.RoutingDriver{Driver: &frr.Driver{Runner: backend.Exec{}}}}
+	} else if *useFRR {
 		drivers = append(drivers, &frr.Driver{Runner: backend.Exec{}})
 	}
 	registry, e := backend.New(drivers...)
@@ -135,6 +145,9 @@ func run() error {
 		db, e = store.NewFile(filepath.Join(*dir, "journal.json"))
 	}
 	if e != nil {
+		return e
+	}
+	if e = agent.CheckDataplaneBinding(context.Background(), db, opts.Agent.Dataplane, registry); e != nil {
 		return e
 	}
 	a, e := agent.New(id.NodeID, db, registry)

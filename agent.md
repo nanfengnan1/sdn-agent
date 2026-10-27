@@ -1,6 +1,58 @@
 # SDN Controller 与 Agent 能力及组件设计
 
-更新日期：2026-10-26。
+更新日期：2026-10-27。
+
+### 2026-10-27：MCP 同步 VPP / EVPN 能力
+
+MCP 保留六个默认只读与六个显式写工具，继续走既有 gRPC。初始化 Instructions、工具描述与 schema 增加 VPP composite、原生 src-only VXLAN、外层双栈、LCP 接口、BD/BVI/L3VNI 与 Router MAC 的语义；能力以实际 Agent 的 operations/backends、queries/families、features 为准。网络查询 source=vpp，协议查询仍来自 FRR；保留原生 records 的嵌套 remotes 和 camelCase 字段，不增加客户端任意选择后端的参数。
+
+sdn_state 的 observation_error 非空，或 sdn_query 的 error 非空 / stale=true，返回 isError=true 与 FailedPrecondition，同时保留原始数据。身份/kind 校验先执行；不把恢复暂停、API 故障或不完整观测标为健康。startup.conf 外部挂载入口已写入 MCP 文档，但文件修改、CPU/内存/PCI、重启与切换数据面没有对应 MCP RPC，仍未实现。
+
+`mcp/vpp_test.go` 新增 7 组测试，使用真实 Agent/Registry/VPP Go Driver 与模拟 Unix HTTP 适配器，覆盖双栈远端、分页指纹、L3VNI 候选、后端约束及异常证据；不启动 VPP 或 Agent worker，不执行宿主机网络命令。本次 go test ./...、go test -race ./mcp/...、go vet ./mcp/...、make build-mcp 和严格 HTML 文档构建通过；生成 bin/sdn-agent-mcp，测试记录在 artifacts/mcp/vpp-update/。未重建/部署容器或提交/推送代码，不等同真实网络转发验收。
+
+### 2026-10-27：架构文档与可选择源码版本的构建入口
+
+`docs/developer/vpp.rst` 增加 FRR/ZAPI/Netlink/LCP/Unix HTTP/Binary API 分层、Linux/VPP 对象映射、LCP 节点和 TAP/TUN 双向通信、完整对称 IRB 流程。参考 `/home/alexan/vxlan-s-evpn/docs/从零手动配置.txt`，明确业务 BD→BVI→租户 FIB→传输 BVI/BD→L3VNI；Leaf2 出口为 br20。区分参考文件 OSPF+Loopback 与已测静态 underlay/接口 VTEP，不扩大验收结论。
+
+`docker/build-vpp.sh` 与两个基础 Dockerfile 支持 nanfengnan1/vpp、nanfengnan1/frr 的 tag/branch/commit，以及各自的本地工作区。远端 VPP_REF 必填，FRR_REF 默认 frr-10.7.0；BUILD_BASES 默认 0，首次设 1。基础镜像默认名改为 alpine/vpp:sdn-base、alpine/frr:sdn-base，最终仍为 alpine/sdn-agent:vpp-dev，名字与源码版本独立。GitHub 适配源码尚待用户推送，完整远端镜像构建待验证，不能把本次脚本/文档校验写成编译成功。
+
+VPP 基础镜像同时保存原生插件/API/PAPI/适配器，Agent 集成不再单独复制外部 VPP_SOURCE，防止版本漂移；旧基础镜像需先重建。构建前检查必要 API/文件，记录实际 commit、ref、dirty、未跟踪文件 SHA256。新版本选择不等于任意 VPP/FRR 组合兼容，已验收仍是本地 VPP26.06/FRR10.7.0。构建不部署、不改网卡、不提交或推送。VPP 仓库另有 `docs/usecases/sdn_agent.rst` 和 `docs/developer/extras/sdn_agent.rst`，分别面向使用者与适配开发者。
+
+本次验证：Docker 单元测试 24 项通过（含新增构建输入/源码来源测试 15 项）；三个 Dockerfile 通过 BuildKit 静态检查，其中两个基础 Dockerfile 分别检查 Git 和 local 模式。Agent 完整 HTML 手册严格构建通过，VPP 新增两篇手册与 LCP 文档的定向严格构建通过，并核对原站点 toctree 入口。本地源码预检查读回真实 commit 与修改标记。FRR 原有 .dockerignore 会排除 .git，脚本通过独立的 frr_git/vpp_git 上下文保留历史；本地模式要求完整 clone，暂不支持 linked worktree。未执行完整镜像编译、部署、网卡操作或 Git 提交/推送。
+
+### 2026-10-27：华为 SR-IOV VF 容器实测
+
+`lab/vpp_sriov_host.py` 显式接管测试 PF `0000:3b:00.0`，保存原驱动、override、VF autoprobe、容器和管理路由后，再停止 `vpp-26-06`。该 PF 当前提供 3 个 VF；PF 留在内核 `hisdk3`/`hinic3`，VF `0000:3b:00.2/.3/.4` 分别绑定 vfio-pci，分配给 Leaf1 / Spine / Leaf2，IOMMU group 为 142 / 143 / 144。管理网卡 eno4 不参与实验。默认测试结束自动删除实验容器并恢复原 PF 驱动和 VPP 容器；`--retain-host` 仅用于连续测试，最后必须显式 restore。
+
+`lab/vpp_sriov.py` 使用 VF0 access VLAN 3101、VF1 trunk、VF2 access VLAN 3102；Spine 在一个 VF 上创建两个 VLAN 子接口。PC 为 network=none 容器，Leaf 的 VPP TAP 直接创建到 PC netns，另建 LCP 控制镜像供 Agent 管理。Docker bridge 仅用于管理，不承载 PC / VXLAN 业务。`vpp_sriov_evpn.py` 验证双栈底层、L2VNI、Type-2 对称 IRB、Spine 断链和恢复及原生查询；`vpp_sriov_offload.py` 验证双向 2 MiB TCP 和 Spine VF 接收侧 pcap 校验和。IPv4/IPv6 VTEP 分开运行，报告和抓包在 `artifacts/vpp/sriov/`。测试通过范围以各次 report.json 为准，不将脚本存在视为通过。
+
+实测修复：Agent bundle 补齐 DPDK 的 libarchive / libatomic / isa-l / RDMA 运行依赖，并在构建时检查缺失动态库；VPP `driver.c` 登记 `net_hinic3`，`device.c` 在未知 PMD 创建 VLAN 子接口时检查空驱动指针，修复实际触发的 SIGSEGV。只更新开发镜像，不修改 v1.0。
+
+本次验收通过：IPv4 VTEP 30 项、IPv6 VTEP 31 项；在 Spine VF RX 分别校验 7,023 / 7,084 个 VXLAN 报文，内层双栈 TCP 双向 2 MiB 哈希一致；三个节点的 Web Gateway/Controller 原生查询和 6 项真实浏览器检查通过。另通过 6 项宿主机保护/恢复单元测试、9 项 bundle 测试、32 项适配器测试。实验资源已清理，PF 恢复 vfio-pci、sriov_numvfs=0，原 vpp-26-06 健康运行，eno4 管理路由不变。结果索引为 `artifacts/vpp/sriov/validation.md`，不代表 Type-5 在物理 VF 上另做了验收。
+
+该实验验证同一物理 NIC 的 VF / 硬件内部交换路径；不等同多台物理 Leaf/Spine 的外部线缆测试。当前 RX LRO 和硬件 VXLAN TSO 未验收，RSS 仅单 RX 队列，不宣称吞吐、硬件隧道卸载、多队列分流或 HA 达标。复现与恢复命令见 [VPP 开发文档](docs/developer/vpp.rst)。
+
+### 2026-10-27：VPP + FRR EVPN / 对称 IRB 实验版
+
+已实现 `agent.dataplane=linux|vpp`，重启生效；默认 Linux 不变。VPP 模式使用单一 composite Driver 管理 Linux 语义镜像与 VPP，不能同时注册独立 Linux Driver。状态绑定数据面，拒绝直接拿旧 Linux 日志切换 VPP。
+
+本地适配器位于 VPP 仓库 `extras/sdn-agent`；使用 Binary API 配置 BD / 端口 / 隧道 / FDB，通过受管 Linux VXLAN FDB 接收 Zebra 有效远端状态，将 VPP 接入端口学习的 MAC 回送 Linux / FRR。周期核对约 1 秒，尚未采用事件驱动。
+
+新增 `irb.py`：租户独立 FIB、BD/BVI 网关、L3VNI Router MAC、Type-2 MAC/IP 与 Type-5 选中路由、ECMP/next-hop 对象和远端 ARP/ND 抑制表。网关 MAC 的报文进入租户 FIB，普通二层报文查 BD；业务在 VPP 转发。Linux 镜像使用 tc 双向隔离，保留 carrier 供 Zebra 识别。
+
+原生多点 VXLAN 已落到 `src/plugins/vxlan/multipoint.c`：每个 VNI 一个接口，CLI 只指定 src，v3 API 以 dst_address=0.0.0.0 表示无固定远端。`vxlan_mp_remote_add_del/dump` 独立维护 MAC→VTEP 和 BUM 成员，不产生逐远端接口。二层 BD/FDB 选择接口，接口按目的 MAC 选远端封装；跨网段先入口 BD/BVI→租户 FIB→出口 BVI/传输 BD，以 Router MAC 选择远端。外层报文查 underlay FIB。Type-3 撤销只删复制成员，所有远端撤销后仍保留 VNI 接口。旧固定 dst 模式和 `l2_egress_flood` API 保留。能力标识为 `vxlan-multipoint/v1`。
+
+多点接口支持 IPv4/IPv6 VTEP 和以太网载荷（内层 IPv4/IPv6）；同一接口的远端须与本地 VTEP 同地址族。VXLAN API 2.3.0 新增 `vxlan_mp_remote_add_del_v2/vxlan_mp_remote_v2_dump`，旧 IPv4 API 保留。TCP GSO 在封装前软件分段；IPv6 外层 UDP 强制有效校验和，接收重新校验外层并清理旧标记。`lab/vpp_offload.py` 验证真实 TAP GSO、TCP 内容及抓包校验和，不能等同物理 NIC TSO/LRO 验收；保持 RX LRO 关闭。旧固定 src/dst RX flow 规则拒绝用于多点接口。
+
+查询已贯通 sdn-web → sdn-controller → Agent → VPP：VXLAN 返回原生接口、地址族、MAC→远端及 BUM 列表；接口查询包含 BVI/VXLAN，支持租户、BD、接口、地址族和远端筛选。Web 展示 VPP 标识与可展开远端表，viewer 可读。Controller 接受双栈 VTEP/underlay 邻居，configureSystem 启用 IPv6 转发；Linux VXLAN 回读兼容 local6/remote6。能力增加 `vxlan-dualstack/v1` 和 `vxlan-software-gso/v1`。真实链路测试用 `lab/vpp_stack.py` 与 sdn-web 的 `tests/e2e/vpp-query.cjs`。
+
+三 VTEP 验收由 `lab/vpp_evpn.py` 执行，原生 API/CLI 生命周期用例见 `lab/vpp_multipoint_api.py`；设置 `SDN_VPP_UNDERLAY=6` 验证 IPv6 外层。运行结果以 artifacts/vpp 的本次报告为准，不代表生产吞吐验收。
+
+模型版本 2 兼容 L2 旧状态与 Undo，保存租户、绑定、BVI 属性、地址与 VNI；不保存动态 EVPN 学习结果。真实验收脚本为 `lab/vpp_evpn.py` 和 `lab/vpp_irb.py`，覆盖二层、对称 IRB、Type-5、租户隔离、撤销和回滚；报告以本次镜像运行输出为准。
+
+镜像 `alpine/sdn-agent:vpp-dev` 集成 VPP 26.06、FRR 10.7.0、Agent、Redis 与适配器。代码、构建、真实隔离验收和冷启动限制见 [VPP 开发说明](docs/developer/vpp.rst) 和 [用户说明](docs/user/vpp.rst)。不修改或发布 v1.0 标签。
+
+尚未实现或验收：多归属、租户内 BGP/OSPF 的 punt 通道、在线切换数据面、硬件 VXLAN TSO/RX LRO、全量冷启动 Running 重放、生产吞吐和 HA。第 7.3 节其余多后端动态启用设计仍未实现，不能把该提案的所有字段当成当前配置。
 
 本文保留项目职责与长期设计约定。2026-10-24 已开始落地 Go 版本；当前实现范围与限制以 [README](README.md)、[协议](api/agent/v1/agent.proto)、[操作目录](docs/operations.md) 和 [事务说明](docs/transactions.md) 为准。下文未标为已实现的组件仍是目标设计，不表示已经交付。
 
@@ -165,7 +217,7 @@ Neighbor Maintenance 从 Running 读取已提交策略，从 Operational 获取�
 | FRR BGP / EVPN | 基础 BGP、邻居、EVPN 地址族、RD/RT、VRF-VNI 关联等配置与查询 |
 | 网络感知 | 采集并报告 EVPN Type-2/Type-3、接口、FDB、邻居和执行状态 |
 
-这张表定义目标接口范围。当前已交付 Linux 和 FRR 后端，具体操作以 [操作目录](docs/operations.md) 为准；VPP、交换机、静态 MAC、主动 ARP/ND 保活等仍待扩展。不支持的操作必须明确返回能力错误。
+这张表定义目标接口范围。当前已有 Linux / FRR 后端和 VPP EVPN / IRB 实验版；具体操作以 [操作目录](docs/operations.md) 与 [VPP 限制](docs/user/vpp.rst) 为准。交换机、通用静态 MAC 操作、主动 ARP/ND 保活等仍待扩展。不支持的操作必须明确返回能力错误。
 
 ### 3.3 当前实现的分层架构
 
@@ -436,7 +488,7 @@ callback 是 Agent 内的函数或 RPC 代理，不跨网络传递函数对象�
 
 ### 7.3 后端按配置启用与资源归属（设计提案，尚未实现）
 
-**状态：设计提案，尚未实现（2026-10-26）。** 本节记录后续开发方向，不代表已交付通用后端开关、资源归属选择或配置热加载。本次仅补充设计文档。
+**状态：通用机制仍为设计提案；2026-10-27 已落地启动时选择 linux / vpp 的特定实现。** 实际字段是 `agent.dataplane`，VPP 模式使用 composite Driver。下面的通用后端开关、动态资源归属和配置热加载草案尚未实现。
 
 #### 7.3.1 现状与设计目标
 
@@ -505,7 +557,7 @@ Stage 与 Commit 必须使用一致的绑定依据，并在 Commit 时重新校�
 - 禁用后端不等于删除其配置，也不自动清理接口、VRF、VXLAN 或路由。资源清理应在原后端可用时通过明确事务执行，迁移则需要独立的可核对流程。
 - 以上约束同样适用于修改配置后重启进程，并非只有运行时热切换才需要检查。恢复既有事务与主机重建后重新下发全部期望配置是不同能力，本方案不将后者视为已实现。
 
-#### 7.3.5 分阶段实施与验收（均未实现）
+#### 7.3.5 通用机制分阶段实施与验收（尚未实现）
 
 | 阶段 | 拟实现内容 | 验收重点 |
 | --- | --- | --- |
@@ -909,7 +961,7 @@ etcd 采用集群选举和多数派提交。不能把 Controller 固定视为 et
 - 获取 Type-2、Type-3 需要独立的 FRR EVPN 采集能力；具体接口及增量方式按目标 FRR 版本验证。
 - FPM 监听、主动查询和其他订阅方式可以并存，Service Adapter 不强制采用同一种连接方向。
 - 同一后端、同一类资源必须明确写入负责人。Linux 中由 FRR 管理的动态路由，不由 Agent 再从拓扑视图重复安装。
-- VPP 和交换机后端需要单独确定动态路由编程与本地学习事件反馈路径；统一配置 Adapter 本身不等于完成 FRR 与该后端的路由集成。
+- VPP 通过受管内核 FDB/路由/邻居与 Binary API 完成 EVPN / IRB 同步；交换机后端仍需单独实现路由编程和本地学习反馈；统一配置 Adapter 本身不等于完成全部协议集成。
 - 远端 EVPN 安装的 MAC/邻居不能被当成本地新学习的主机再次通告。
 - 默认只探测本节点直接接入且属于已授权策略范围的主机，不由每个 Leaf 周期性探测全网远端主机。
 
@@ -932,7 +984,7 @@ Type-2 的 IP 信息可能缺失，未被学习或通告的静默主机也不会
 以下事项不影响已确认的单节点事务范围、全后端依赖执行、显式 commit、失败回滚、断连继续和节点三态：
 
 - Linux/FRR 已实现后继续扩展哪些后端，以及新增操作如何保存原值、验证和回滚。
-- 按配置启用后端、显式资源归属与协同分发、恢复依赖校验；先实现启动时选择，再评估运行时重载，详见 [7.3 设计提案](#73-后端按配置启用与资源归属设计提案尚未实现)，目前尚未实现。
+- 通用后端开关、显式资源归属与协同分发、运行时重载仍待实现，详见 [7.3 设计提案](#73-后端按配置启用与资源归属设计提案尚未实现)；特定 linux / vpp 启动选择与恢复依赖校验已实现。
 - 当前静态 `.proto` 的版本兼容规则、完整错误目录和未来 Any 类型注册方式。
 - 在已实现 `depends_on` 和 Driver 生命周期接口之上，扩展步骤输出引用、自动资源依赖及验证标准。
 - 在已实现 Redis/File 持久化与任务补偿恢复之上，确定候选事务、事件和最终任务记录的保留期限。

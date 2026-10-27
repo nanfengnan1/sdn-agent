@@ -1,0 +1,194 @@
+# syntax=docker/dockerfile:1
+# Context: sdn-agent/docker. git mode reads VPP_REPOSITORY + VPP_REF;
+# local mode requires vpp_source=/path/to/checkout and vpp_git=/path/to/checkout/.git contexts.
+
+ARG ALPINE_VERSION=3.22
+ARG VPP_SOURCE_MODE=git
+
+FROM alpine:${ALPINE_VERSION} AS build-deps
+RUN apk add --no-cache bash build-base clang cmake ninja git curl ca-certificates linux-headers python3 py3-ply py3-setuptools py3-jsonschema openssl-dev libunwind-dev numactl-dev libpcap-dev elfutils-dev libnl3-dev libmnl-dev dpdk-dev bsd-compat-headers pax-utils
+
+FROM build-deps AS source-git
+ARG VPP_REPOSITORY=https://github.com/nanfengnan1/vpp.git
+ARG VPP_REF
+ARG SOURCE_CACHE_BUST=0
+COPY vpp/fetch-source.sh /build-tools/fetch-source.sh
+RUN : "$SOURCE_CACHE_BUST" && sh /build-tools/fetch-source.sh "$VPP_REPOSITORY" "$VPP_REF" /src/vpp
+
+FROM build-deps AS source-local
+WORKDIR /src/vpp
+COPY --from=vpp_source . .
+# Source .dockerignore may exclude .git; version/provenance needs its history.
+COPY --from=vpp_git . .git/
+
+FROM source-${VPP_SOURCE_MODE} AS source
+ARG VPP_REPOSITORY=https://github.com/nanfengnan1/vpp.git
+ARG VPP_REF=local
+WORKDIR /src/vpp
+COPY vpp/source-metadata.py /build-tools/source-metadata.py
+RUN python3 /build-tools/source-metadata.py vpp /src/vpp /source-metadata "$VPP_REPOSITORY" "$VPP_REF"
+
+FROM build-deps AS dpdk-build
+WORKDIR /src/vpp
+# Native VPP edits must not invalidate the DPDK download/build cache.
+COPY --from=source /src/vpp/build/external/packages/dpdk.mk build/external/packages/dpdk.mk
+COPY --from=source /src/vpp/build/external/patches/ build/external/patches/
+ARG BUILD_JOBS=12
+# Match the DPDK version, checksum and patches declared by the chosen VPP branch.
+RUN apk add --no-cache ccache meson py3-elftools autoconf automake libtool
+RUN dpdk_version="$(awk '$1 == "dpdk_version" { print $3; exit }' build/external/packages/dpdk.mk)" \
+    && dpdk_sha256="$(awk -v key="dpdk_tarball_sha256sum_${dpdk_version}" '$1 == key { print $3; exit }' build/external/packages/dpdk.mk)" \
+    && test -n "$dpdk_version" && test -n "$dpdk_sha256" \
+    && curl -fsSL --retry 3 "https://fast.dpdk.org/rel/dpdk-${dpdk_version}.tar.xz" \
+         -o /tmp/dpdk.tar.xz \
+    && printf '%s  /tmp/dpdk.tar.xz\n' "$dpdk_sha256" | sha256sum -c - \
+    && mkdir /src/dpdk \
+    && tar -xJf /tmp/dpdk.tar.xz -C /src/dpdk --strip-components=1 \
+    && for patch_file in "build/external/patches/dpdk_${dpdk_version}"/*.patch; do \
+         [ -f "$patch_file" ] || continue; \
+         patch -d /src/dpdk -p1 < "$patch_file" || exit 1; \
+       done \
+    && printf '%s\n' "$dpdk_version" > /dpdk-version \
+    && rm /tmp/dpdk.tar.xz
+RUN --mount=type=cache,target=/root/.cache/ccache \
+    CC='ccache clang' meson setup /dpdk-build /src/dpdk \
+      --prefix=/opt/dpdk --libdir=lib --buildtype=release \
+      -Dplatform=generic -Denable_driver_sdk=true -Dtests=false \
+      -Ddisable_drivers=mempool/cnxk,mempool/dpaa \
+      -Dexamples= -Ddefault_library=shared \
+    && ninja -C /dpdk-build -j "${BUILD_JOBS}" \
+    && ninja -C /dpdk-build install
+
+# libdaq headers >= 3.0.21 are required by the requested snort plugin.
+RUN curl -fsSL --retry 3 --connect-timeout 20 https://codeload.github.com/snort3/libdaq/tar.gz/refs/tags/v3.0.21 -o /tmp/libdaq.tar.gz \
+    && sha256sum /tmp/libdaq.tar.gz > /libdaq-source.sha256 \
+    && mkdir /src/libdaq && tar -xzf /tmp/libdaq.tar.gz -C /src/libdaq --strip-components=1 \
+    && cd /src/libdaq && ./bootstrap && ./configure --prefix=/usr \
+    && make -j "${BUILD_JOBS}" && make install
+
+FROM dpdk-build AS build
+COPY --from=source /src/vpp/ /src/vpp/
+COPY --from=source /source-metadata /source-metadata
+ARG BUILD_JOBS=12
+ENV PKG_CONFIG_PATH=/opt/dpdk/lib/pkgconfig
+ENV LD_LIBRARY_PATH=/opt/dpdk/lib
+# VCL's glibc-specific LD_PRELOAD adapter is not built on musl.
+# The runtime includes vppctl; optional standalone statistics tools are omitted.
+# musl resolves plugin symbols eagerly. IOAM needs both exported VXLAN-GPE
+# rewrite functions and an explicit dependency on the VXLAN-GPE plugin.
+RUN <<'SH'
+python3 - <<'PY'
+from pathlib import Path
+import re
+header = Path('src/plugins/vxlan-gpe/vxlan_gpe.h')
+if header.exists():
+    text = header.read_text()
+    text = re.sub(r'(?m)^int (vxlan[46]_gpe_rewrite)\b', r'int __clib_export \1', text)
+    header.write_text(text)
+registration = Path('src/plugins/ioam/encap/ip6_ioam_trace.c')
+if registration.exists():
+    text = registration.read_text()
+    if '.load_after' not in text:
+        text = re.sub(r'(VLIB_PLUGIN_REGISTER\s*\(\s*\)\s*=\s*\{)',
+                      r'\1\n    .load_after = "vxlan-gpe_plugin.so",', text, count=1)
+    registration.write_text(text)
+loader = Path('src/vlib/unix/plugin.c')
+if loader.exists():
+    text = loader.read_text().replace(
+        'dlopen ((char *) pi->filename, RTLD_LAZY);',
+        'dlopen ((char *) pi->filename, RTLD_LAZY | RTLD_GLOBAL);')
+    loader.write_text(text)
+engine = Path('src/vnet/crypto/engine.h')
+if engine.exists():
+    text = engine.read_text().replace(
+        '__clib_export vnet_crypto_engine_registration_t __vnet_crypto_engine',
+        '__attribute__((visibility("protected"))) vnet_crypto_engine_registration_t __vnet_crypto_engine')
+    engine.write_text(text)
+buffers = Path('src/plugins/dpdk/buffer.c')
+text = buffers.read_text()
+text = text.replace(
+    '  rte_mempool_set_ops_byname (mp, "vpp", NULL);',
+    '  if (rte_mempool_set_ops_byname (mp, "vpp", NULL) < 0)\n'
+    '    return clib_error_return (0, "DPDK vpp mempool ops unavailable");')
+text = text.replace(
+    '  rte_mempool_set_ops_byname (nmp, "vpp-no-cache", NULL);',
+    '  if (rte_mempool_set_ops_byname (nmp, "vpp-no-cache", NULL) < 0)\n'
+    '    return clib_error_return (0, "DPDK vpp-no-cache mempool ops unavailable");')
+text = text.replace(
+    '  rte_mempool_register_ops (&ops);',
+    '  if (rte_mempool_register_ops (&ops) < 0)\n'
+    '    return clib_error_return (0, "DPDK mempool ops registration failed: %s", ops.name);')
+buffers.write_text(text)
+PY
+git diff -- src/plugins/vxlan-gpe/vxlan_gpe.h src/plugins/ioam/encap/ip6_ioam_trace.c src/vlib/unix/plugin.c src/vnet/crypto/engine.h src/plugins/dpdk/buffer.c > /vpp-alpine.patch
+SH
+
+RUN --mount=type=cache,target=/root/.cache/ccache \
+    cmake -S src -B /build -G Ninja \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_INSTALL_PREFIX=/usr \
+      -DCMAKE_INSTALL_LIBDIR=lib \
+      -DCMAKE_C_COMPILER=clang \
+      -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+      -DCMAKE_C_FLAGS=-D_GNU_SOURCE= \
+      -DVPP_USE_LTO=OFF \
+      -DVPP_USE_SYSTEM_DPDK=ON \
+      -DVPP_BUILD_VCL=OFF \
+      -DVPP_API_TEST_BUILTIN=OFF \
+      -DVPP_TESTS=none \
+      -DVPP_TOOLS=vppctl \
+    && cmake --build /build --target vpp vppctl dpdk_plugin --parallel "${BUILD_JOBS}" \
+    && cmake --build /build --parallel "${BUILD_JOBS}" \
+    && for component in libvppinfra vpp vpp-plugin-core vpp-plugin-dpdk vpp-plugin-devtools vpp-plugin-snort vpp-drivers vpp-crypto-engines; do \
+         DESTDIR=/install cmake --install /build --strip --component "$component" || exit 1; \
+       done \
+    && rm -rf /install/usr/include /install/usr/lib/cmake /install/usr/lib/pkgconfig \
+    && find /install -type f -name '*.a' -delete \
+    && mkdir -p /install/usr/share/vpp \
+    && mkdir -p /install/opt \
+    && cp -a /opt/dpdk /install/opt/dpdk \
+    && rm -rf /install/opt/dpdk/include /install/opt/dpdk/lib/pkgconfig \
+    && find /install/opt/dpdk -type f -name '*.a' -delete \
+    && cp /source-metadata/source-commit /source-metadata/source.json /install/usr/share/vpp/ \
+    && cp /source-metadata/source.patch /install/usr/share/vpp/sdn-source.patch \
+    && mkdir -p /install/usr/local/lib/sdn-agent/vpp \
+    && cp -a src/vpp-api/python/vpp_papi /install/usr/local/lib/sdn-agent/vpp_papi \
+    && cp extras/sdn-agent/adapter.py extras/sdn-agent/irb.py /install/usr/local/lib/sdn-agent/vpp/ \
+    && cp /dpdk-version /install/usr/share/vpp/dpdk-version \
+    && cp /vpp-alpine.patch /install/usr/share/vpp/alpine-compat.patch \
+    && cp /libdaq-source.sha256 /install/usr/share/vpp/libdaq-source.sha256 \
+    && cp LICENSE /install/usr/share/vpp/LICENSE
+
+RUN scanelf --needed --nobanner --format '%n#p' --recursive /install \
+         | tr ',' '\n' | sort -u > /needed-libraries \
+    && while IFS= read -r lib; do \
+         [ -n "$lib" ] || continue; \
+         if ! find /install -name "$lib" -print -quit | grep -q .; then \
+           printf 'so:%s\n' "$lib"; \
+         fi; \
+       done < /needed-libraries > /runtime-dependencies
+
+FROM alpine:${ALPINE_VERSION}
+COPY --from=build /runtime-dependencies /tmp/vpp-runtime-dependencies
+RUN apk add --no-cache ca-certificates tini iproute2 iputils tcpdump \
+      $(cat /tmp/vpp-runtime-dependencies) \
+    && rm /tmp/vpp-runtime-dependencies \
+    && addgroup -S vpp \
+    && mkdir -p /etc/vpp/conf.d /run/vpp /var/log/vpp
+COPY --from=build /install/usr/ /usr/
+COPY --from=build /install/opt/ /opt/
+
+COPY vpp/startup.conf /etc/vpp/startup.conf
+ARG VPP_REPOSITORY=https://github.com/nanfengnan1/vpp.git
+ARG VPP_REF=local
+LABEL org.opencontainers.image.title="VPP on Alpine" \
+      org.opencontainers.image.source="${VPP_REPOSITORY}" \
+      io.sdn.source.ref="${VPP_REF}"
+ENV VPP_CLI_SOCKET=/run/vpp/cli.sock
+ENV LD_LIBRARY_PATH=/usr/lib:/opt/dpdk/lib
+WORKDIR /etc/vpp
+STOPSIGNAL SIGTERM
+HEALTHCHECK --interval=10s --timeout=5s --start-period=60s --retries=3 \
+  CMD vppctl -s "$VPP_CLI_SOCKET" show version >/dev/null 2>&1 || exit 1
+ENTRYPOINT ["/sbin/tini", "--"]
+CMD ["vpp", "-c", "/etc/vpp/startup.conf"]

@@ -5,6 +5,7 @@
 希望同时获得 Agent 与 FRR 运行环境使用 :ref:`agent-docker-deploy`。
 两种方式均需要配置令牌，安装成功后再阅读 :doc:`quickstart` 提交业务配置。
 交付二进制、发布镜像、分发手册以及升级回退流程见 :doc:`release`。
+本页的默认镜像使用 Linux 数据面；VPP + FRR 源码镜像、版本选择和启动方式见 :doc:`vpp`。
 
 .. contents:: 本页步骤
    :local:
@@ -34,9 +35,12 @@ Agent 的本地数据面运行平台为 **Linux**，当前验收架构为 **x86_
    * - Agent 容器用户空间
      - Alpine 3.22；验收实例为 3.22.6
      - 当前 Dockerfile 默认运行镜像系列；容器共享宿主机 Linux 内核，Alpine 版本不是内核版本
-   * - FRR 当前验收基线
+   * - Linux 数据面 FRR 验收基线
      - 10.2.2
      - Alpine 源码镜像；已有资源验收覆盖 IPv4 / IPv6、OSPFv2 / v3、BGP / EVPN、Type-5、查询与回滚场景
+   * - VPP 数据面实验基线
+     - VPP 26.06 / FRR 10.7.0，Alpine 3.22
+     - 本地适配源码镜像；EVPN / 对称 IRB、双栈、软件 GSO 和 Huawei VF 实验，范围见 :doc:`vpp`；推送后的 GitHub 源码构建待验证
    * - FRR 历史回归基线
      - quay.io/frrouting/frr:10.0.0（CLI 显示 10.0_git）
      - 2026-10-24 的 IPv4 VXLAN / EVPN 与事务恢复实验；不据此宣称后来新增能力已在该版本重新验收

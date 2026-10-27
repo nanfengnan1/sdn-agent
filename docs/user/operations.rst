@@ -12,6 +12,10 @@
 新增 OSPF6_INSTANCE、OSPF6_INTERFACE、BGP_AF_PEER、BGP_NETWORK、
 BGP_REDISTRIBUTE、EVPN_TYPE5 的字段、动作和示例见 :doc:`resources`。
 
+下文后端描述以默认 Linux 数据面为准。选择 ``agent.dataplane=vpp`` 后，
+同一组网络操作由 VPP composite 协调 Linux 控制镜像和 VPP 转发表；
+支持范围、接口要求和三层配置顺序见 :doc:`vpp`，以节点 Capabilities 为准。
+
 Linux 网络对象
 --------------
 
@@ -161,6 +165,6 @@ iproute2 把该整数直接写入 IFLA_BR_AGEING_TIME；其单位见
 不要把 USER_HZ 与内核调度用的 CONFIG_HZ 混为一谈。
 ``neigh_suppress`` 控制邻居抑制，均不等于主动探测或永不老化。
 
-当前没有静态 MAC、主动 ARP / ND、ESI 多归属、BFD、ACL、
-VPP 或交换机 API 操作。未知 code、错误 oneof、非法动作都会被拒绝，
+当前没有静态 MAC、主动 ARP / ND、ESI 多归属、BFD、ACL 或硬件交换机专用操作，
+也不提供任意 VPP Binary API 透传。未知 code、错误 oneof、非法动作都会被拒绝，
 不能用任意 shell / vtysh 字符串绕过能力边界。

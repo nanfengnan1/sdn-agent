@@ -21,6 +21,9 @@ func messageSchema(d protoreflect.MessageDescriptor) schema {
 		properties[string(f.Name())] = fieldSchema(f)
 	}
 	out := schema{"type": "object", "properties": properties, "additionalProperties": false}
+	if description := messageDescriptions[d.FullName()]; description != "" {
+		out["description"] = description
+	}
 	if d.FullName() == "sdn.agent.v1.Operation" {
 		out["required"] = []string{"id", "code", "action"}
 		properties["id"].(schema)["minLength"] = 1
@@ -46,10 +49,48 @@ func fieldSchema(f protoreflect.FieldDescriptor) schema {
 		return schema{"type": "object", "additionalProperties": scalarSchema(f.MapValue())}
 	}
 	s := scalarSchema(f)
+	if description := fieldDescriptions[f.FullName()]; description != "" {
+		s["description"] = description
+	}
 	if f.IsList() {
 		return schema{"type": "array", "items": s, "maxItems": 1000}
 	}
 	return s
+}
+
+// Explain backend semantics in tools/list without narrowing the shared protocol
+// to one dataplane. Actual support and validation remain authoritative in Agent.
+var messageDescriptions = map[protoreflect.FullName]string{
+	"sdn.agent.v1.Operation": "Typed network intent for the configured Agent backend. Read capabilities first. Does not accept shell commands, VPP CLI, startup files or dataplane changes.",
+	"sdn.agent.v1.Tenant":    "Linux VRF; in VPP mode also owns independent IPv4/IPv6 tenant FIBs. The tenant table ID is distinct from a VNI or BD ID.",
+	"sdn.agent.v1.Bridge":    "Linux bridge; in VPP mode maps to an owned BD and, when tenant-bound, a BVI. VPP does not support STP.",
+	"sdn.agent.v1.Vxlan":     "EVPN VXLAN object. In VPP mode one source-only multipoint interface per VNI; remote endpoints come from EVPN. No dst, remote or is_l3 input is supported.",
+	"sdn.agent.v1.L3Vni":     "Associate a tenant with an existing L3VNI. For VPP symmetric IRB first create the tenant-bound transport BD/BVI, Router MAC and Ethernet VXLAN port; this association alone does not create the forwarding path.",
+}
+
+var fieldDescriptions = map[protoreflect.FullName]string{
+	"sdn.agent.v1.QueryRequest.kind":         "Select a kind advertised by sdn_capabilities. Network queries use the configured Linux/VPP backend; BGP/EVPN/OSPF queries use FRR.",
+	"sdn.agent.v1.QueryRequest.vrf":          "Tenant/VRF name. With VPP, selects the managed tenant FIB or resources bound to that tenant.",
+	"sdn.agent.v1.QueryRequest.bridge":       "Managed bridge name, such as br50000. This is not a native numeric VPP BD ID.",
+	"sdn.agent.v1.QueryRequest.interface":    "Interface name as returned by a preceding query. VPP interface queries include LCP interfaces, BVIs and VXLAN interfaces.",
+	"sdn.agent.v1.QueryRequest.family":       "Use a family advertised for this kind. For VXLAN_TUNNELS, IPV4/IPV6 filters outer VTEP addresses, not inner payload addresses.",
+	"sdn.agent.v1.QueryRequest.neighbor":     "IP address filter. For VPP VXLAN_TUNNELS, selects tunnels containing this remote VTEP; remotes remains the complete member list of each matching tunnel.",
+	"sdn.agent.v1.QueryRequest.prefix":       "IP prefix filter for supported route/address queries; not a VNI selector.",
+	"sdn.agent.v1.QueryRequest.route_type":   "EVPN route type (for example 2, 3 or 5), only with EVPN_ROUTES or BGP_ROUTES family L2VPN_EVPN. Zero means all types.",
+	"sdn.agent.v1.QueryRequest.page_token":   "Opaque next_page_token from the same query and unchanged filters. Restart pagination if Agent reports changed data.",
+	"sdn.agent.v1.Tenant.table_id":           "Tenant routing table ID; distinct from the underlay FIB, BD ID and VNI.",
+	"sdn.agent.v1.Bridge.stp":                "VPP accepts only false or omission; STP is not implemented by the VPP backend.",
+	"sdn.agent.v1.Bridge.ageing_time":        "FDB ageing time in seconds. VPP supports zero or multiples of 60, up to 15300; omission preserves the current/default value.",
+	"sdn.agent.v1.Bridge.mac":                "MAC for the bridge/BVI. An L3VNI transport BVI uses its Router MAC.",
+	"sdn.agent.v1.BridgePort.port":           "Existing managed interface. In VPP mode use the LCP/control interface name or managed VXLAN name, not an assumed sw_if_index.",
+	"sdn.agent.v1.BridgePort.learning":       "For EVPN VXLAN ports use false: remote MACs are supplied by the control plane. Optional false is distinct from omission.",
+	"sdn.agent.v1.BridgePort.neigh_suppress": "Enable remote ARP/ND suppression when required. This is not active neighbor keepalive.",
+	"sdn.agent.v1.Address.interface":         "Interface or bridge name; addressing a tenant-bound bridge configures its VPP BVI gateway in VPP mode.",
+	"sdn.agent.v1.Vxlan.local":               "Local IPv4 or IPv6 VTEP address (src). Remote endpoints learned for this VNI must use the same outer address family.",
+	"sdn.agent.v1.Vxlan.vni":                 "VXLAN network identifier; distinct from bridge ID and tenant routing table ID.",
+	"sdn.agent.v1.Vxlan.underlay":            "Existing Linux underlay interface name; in VPP mode it must map to an LCP pair. This does not configure or bind a PCI device.",
+	"sdn.agent.v1.Vxlan.learning":            "Use false for EVPN control-plane MAC learning.",
+	"sdn.agent.v1.Peer.vrf":                  "FRR VRF; VPP mode does not support tenant BGP sessions through BVI. Underlay/default-instance EVPN peering remains supported.",
 }
 
 func scalarSchema(f protoreflect.FieldDescriptor) schema {

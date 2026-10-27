@@ -26,6 +26,20 @@ func (d *Driver) Codes() []pb.OpCode {
 
 var nameRE = regexp.MustCompile(`^[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,14}$`)
 
+// iproute2 omits /32 and /128 on host routes and spells /0 as default.
+func routePrefix(s string) string {
+	if p, err := netip.ParsePrefix(s); err == nil {
+		if p.Bits() == 0 {
+			return "default"
+		}
+		return p.Masked().String()
+	}
+	if ip, err := netip.ParseAddr(s); err == nil {
+		return netip.PrefixFrom(ip, ip.BitLen()).String()
+	}
+	return s
+}
+
 func name(s string) error {
 	if !nameRE.MatchString(s) {
 		return fmt.Errorf("invalid interface name %q", s)
@@ -343,11 +357,9 @@ func (d *Driver) view(ctx context.Context, o *pb.Operation) (view, error) {
 		}
 		v["exists"] = "false"
 		for _, r := range rs {
-			p := x.Prefix
-			if p == "0.0.0.0/0" || p == "::/0" {
-				p = "default"
-			}
-			if r["dst"] == p {
+			p := routePrefix(x.Prefix)
+			dst, _ := r["dst"].(string)
+			if routePrefix(dst) == p {
 				if r["gateway"] != x.Gateway || r["dev"] != x.Interface {
 					return nil, fmt.Errorf("conflicting route for %s", p)
 				}
@@ -429,6 +441,12 @@ func (d *Driver) view(ctx context.Context, o *pb.Operation) (view, error) {
 		case pb.OpCode_VXLAN:
 			for _, k := range []string{"id", "local", "port", "learning"} {
 				v[k] = num(l.Info.Data[k])
+			}
+			if local6, ok := l.Info.Data["local6"]; ok {
+				v["local"] = num(local6)
+			}
+			if address, e := netip.ParseAddr(v["local"]); e == nil {
+				v["local"] = address.String()
 			}
 		}
 	}
@@ -804,6 +822,9 @@ func (d *Driver) Verify(ctx context.Context, o *pb.Operation) error {
 			want["kind"] = "vxlan"
 			want["id"] = num(x.Vni)
 			want["local"] = x.Local
+			if address, e := netip.ParseAddr(x.Local); e == nil {
+				want["local"] = address.String()
+			}
 			port := x.Port
 			if port == 0 {
 				port = 4789

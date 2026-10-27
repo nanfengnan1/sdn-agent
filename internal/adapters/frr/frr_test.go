@@ -8,6 +8,23 @@ import (
 
 type runner struct{ text string }
 
+func TestSuccessfulCommitNotesDoNotHideSubsequentErrors(t *testing.T) {
+	for _, tc := range []struct {
+		output string
+		failed bool
+	}{
+		{"% Configuration applied with notes:\nL3VNI will become active when BGP starts\n", false},
+		{"% Configuration applied with notes:\n% Unknown command\n", true},
+		{"% Configuration applied with notes:\nERROR: failed\n", true},
+	} {
+		d := &Driver{Runner: runner{text: tc.output}}
+		_, err := d.cli(context.Background(), "configure terminal")
+		if (err != nil) != tc.failed {
+			t.Fatalf("output %q: %v", tc.output, err)
+		}
+	}
+}
+
 func (r runner) Run(context.Context, ...string) (string, error) { return r.text, nil }
 func TestVerifyScopesTenantAndAddressFamily(t *testing.T) {
 	d := &Driver{Runner: runner{text: "frr version 10\nrouter bgp 65000\n address-family l2vpn evpn\n  rd 10.0.0.1:1\n exit-address-family\nexit\nrouter bgp 65000 vrf A\n address-family l2vpn evpn\n  rd 10.0.0.1:2\n exit-address-family\nexit\nend\n"}}

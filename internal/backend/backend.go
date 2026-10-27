@@ -79,6 +79,9 @@ func (r *Registry) Capabilities(node string) *pb.Capabilities {
 	}
 	sort.Slice(out.Operations, func(i, j int) bool { return out.Operations[i].Code < out.Operations[j].Code })
 	for _, d := range r.drivers {
+		if f, ok := d.(interface{ Features() []string }); ok {
+			out.Features = append(out.Features, f.Features()...)
+		}
 		if q, ok := d.(Querier); ok {
 			out.Queries = append(out.Queries, q.QueryCapabilities()...)
 		}

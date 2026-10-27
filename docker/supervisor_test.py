@@ -1,4 +1,5 @@
 """Process-supervision checks; never start Docker, FRR, or modify host networking."""
+
 import importlib.util
 import json
 from pathlib import Path
@@ -8,7 +9,9 @@ import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
-spec = importlib.util.spec_from_file_location('supervisor', Path(__file__).with_name('supervisor.py'))
+spec = importlib.util.spec_from_file_location(
+    "supervisor", Path(__file__).with_name("supervisor.py")
+)
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 
@@ -91,7 +94,72 @@ class SupervisionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp, patch.object(module, 'RUNTIME', Path(tmp) / 'runtime.json'), patch.object(module, 'validated_config', return_value=config), patch.object(module, 'prepare_redis', return_value=account), patch.object(module, 'redis_command', return_value=['redis-server']), patch.object(module, 'prepare_frr'), patch.object(module, 'wait_ready'), patch.object(module, 'write_runtime'), patch.object(module.subprocess, 'Popen', side_effect=[redis, agent]), patch.object(module.subprocess, 'run', side_effect=run), patch.object(module, 'stop_child', side_effect=stop):
             self.assertEqual(module.main(['-config', '/agent.conf']), 1)
         self.assertEqual(events, ['agent-stop', 'frr-stop', 'redis-stop'])
+    def test_vpp_failure_stops_agent_before_network_dependencies(self):
+        config = {
+            "agent": {
+                "listen": ":9090",
+                "frr": True,
+                "dataplane": "vpp",
+                "stateDir": "/data",
+            },
+            "redis": {
+                "enabled": True,
+                "startupTimeoutSeconds": 30,
+                "shutdownTimeoutSeconds": 30,
+            },
+            "vpp": {
+                "startupConfig": "/etc/vpp/startup.conf",
+                "apiSocket": "/run/vpp/api.sock",
+                "adapterSocket": "/run/sdn-agent/vpp.sock",
+                "startupTimeoutSeconds": 60,
+            },
+        }
+        events = []
+        redis, vpp, adapter, agent = [Mock() for _ in range(4)]
+        for child in (redis, vpp, adapter, agent):
+            child.poll.return_value = None
+        vpp.poll.return_value = 1
+
+        def stop(child, timeout):
+            events.append(
+                {
+                    id(redis): "redis",
+                    id(vpp): "vpp",
+                    id(adapter): "adapter",
+                    id(agent): "agent",
+                }[id(child)]
+            )
+
+        def run(args, **kwargs):
+            if args[-1] == "stop":
+                events.append("frr")
+
+        with tempfile.TemporaryDirectory() as tmp, patch.object(
+            module, "RUNTIME", Path(tmp) / "runtime.json"
+        ), patch.object(module, "validated_config", return_value=config), patch.object(
+            module, "prepare_redis", return_value=Mock(pw_uid=101, pw_gid=101)
+        ), patch.object(
+            module, "redis_command", return_value=["redis-server"]
+        ), patch.object(
+            module, "prepare_frr"
+        ), patch.object(
+            module, "wait_ready"
+        ), patch.object(
+            module, "write_runtime"
+        ), patch.object(
+            module.Path, "is_file", return_value=True
+        ), patch.object(
+            module.Path, "mkdir"
+        ), patch.object(
+            module.subprocess, "Popen", side_effect=[redis, vpp, adapter, agent]
+        ), patch.object(
+            module.subprocess, "run", side_effect=run
+        ), patch.object(
+            module, "stop_child", side_effect=stop
+        ):
+            self.assertEqual(module.main([]), 1)
+        self.assertEqual(events, ["agent", "adapter", "frr", "vpp", "redis"])
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

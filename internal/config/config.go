@@ -24,6 +24,7 @@ type Agent struct {
 	StateDir   string `json:"stateDir"`
 	Redis      string `json:"redis"`
 	FRR        bool   `json:"frr"`
+	Dataplane  string `json:"dataplane"`
 	Token      string `json:"token,omitempty"`
 	Cert       string `json:"cert"`
 	Key        string `json:"key"`
@@ -45,6 +46,16 @@ type Redis struct {
 type Config struct {
 	Agent Agent `json:"agent"`
 	Redis Redis `json:"redis"`
+	VPP   VPP   `json:"vpp"`
+}
+
+// VPP selection takes effect on restart. Existing state cannot be migrated by
+// changing this setting; the Agent checks a persistent backend binding.
+type VPP struct {
+	StartupConfig         string `json:"startupConfig"`
+	APISocket             string `json:"apiSocket"`
+	AdapterSocket         string `json:"adapterSocket"`
+	StartupTimeoutSeconds int    `json:"startupTimeoutSeconds"`
 }
 
 type Options struct {
@@ -55,7 +66,8 @@ type Options struct {
 
 func Defaults() Config {
 	return Config{
-		Agent: Agent{Listen: ":9090", StateDir: "/var/lib/sdn-agent", FRR: true},
+		Agent: Agent{Listen: ":9090", StateDir: "/var/lib/sdn-agent", FRR: true, Dataplane: "linux"},
+		VPP:   VPP{StartupConfig: "/etc/vpp/startup.conf", APISocket: "/run/vpp/api.sock", AdapterSocket: "/run/sdn-agent/vpp.sock", StartupTimeoutSeconds: 60},
 		Redis: Redis{Bind: "127.0.0.1", Port: 6379, DataDir: "/var/lib/redis", AppendOnly: true,
 			AppendFsync: "always", StartupTimeoutSeconds: 30, ShutdownTimeoutSeconds: 30},
 	}
@@ -76,6 +88,7 @@ func Parse(args []string, getenv func(string) (string, bool), output io.Writer) 
 	fs.StringVar(&d.Agent.StateDir, "state-dir", d.Agent.StateDir, "identity and development journal")
 	fs.StringVar(&d.Agent.Redis, "redis", "", "Redis address (production journal)")
 	fs.BoolVar(&d.Agent.FRR, "frr", true, "enable dedicated FRR adapter")
+	fs.StringVar(&d.Agent.Dataplane, "dataplane", d.Agent.Dataplane, "linux or vpp; restart required")
 	fs.StringVar(&d.Agent.Cert, "cert", "", "TLS certificate")
 	fs.StringVar(&d.Agent.Key, "key", "", "TLS private key")
 	fs.StringVar(&d.Agent.CA, "ca", "", "controller CA")
@@ -118,6 +131,8 @@ func Parse(args []string, getenv func(string) (string, bool), output io.Writer) 
 			result.Agent.Redis = d.Agent.Redis
 		case "frr":
 			result.Agent.FRR = d.Agent.FRR
+		case "dataplane":
+			result.Agent.Dataplane = d.Agent.Dataplane
 		case "cert":
 			result.Agent.Cert = d.Agent.Cert
 		case "key":
@@ -216,6 +231,25 @@ func decode(data []byte, into *Config) error {
 }
 
 func (c Config) Validate() error {
+	if c.Agent.Dataplane != "linux" && c.Agent.Dataplane != "vpp" {
+		return errors.New("agent.dataplane must be linux or vpp")
+	}
+	if c.Agent.Dataplane == "vpp" {
+		if !c.Agent.FRR {
+			return errors.New("vpp mode currently requires agent.frr=true")
+		}
+		for _, path := range []string{c.VPP.StartupConfig, c.VPP.APISocket, c.VPP.AdapterSocket} {
+			if !filepath.IsAbs(path) || filepath.Clean(path) == "/" {
+				return errors.New("VPP configuration and socket paths must be absolute file paths")
+			}
+		}
+		if c.VPP.APISocket == c.VPP.AdapterSocket {
+			return errors.New("VPP API and adapter sockets must differ")
+		}
+		if c.VPP.StartupTimeoutSeconds < 1 || c.VPP.StartupTimeoutSeconds > 600 {
+			return errors.New("vpp.startupTimeoutSeconds must be 1..600")
+		}
+	}
 	checkAddress := func(label, value string, allowZero bool) error {
 		_, port, err := net.SplitHostPort(value)
 		if err != nil {

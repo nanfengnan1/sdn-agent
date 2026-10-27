@@ -1,0 +1,57 @@
+# syntax=docker/dockerfile:1
+# Context: parent of sdn-agent. Build both bases with docker/build-vpp.sh.
+# PAPI + adapter MUST come from the same VPP image as the native plugins.
+ARG VPP_IMAGE=alpine/vpp:sdn-base
+ARG FRR_IMAGE=alpine/frr:sdn-base
+FROM ${VPP_IMAGE} AS vpp
+FROM redis:7.4-alpine AS redis
+FROM golang:1.25-alpine3.22 AS agent-build
+WORKDIR /src/sdn-agent
+COPY sdn-agent/go.mod sdn-agent/go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
+COPY sdn-agent/api ./api
+COPY sdn-agent/internal ./internal
+COPY sdn-agent/cmd ./cmd
+COPY sdn-agent/mcp ./mcp
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 go build -trimpath -o /out/sdn-agent ./cmd/sdn-agent && \
+    CGO_ENABLED=0 go build -trimpath -o /out/sdnctl ./cmd/sdnctl && \
+    CGO_ENABLED=0 go build -trimpath -o /out/sdn-agent-mcp ./mcp/cmd/sdn-agent-mcp
+
+FROM ${FRR_IMAGE}
+COPY --from=vpp /usr/bin/vpp* /usr/bin/
+COPY --from=vpp /usr/lib/libv*.so* /usr/lib/
+COPY --from=vpp /usr/lib/libsvm.so* /usr/lib/
+COPY --from=vpp /usr/lib/liblcp.so* /usr/lib/
+COPY --from=vpp /usr/lib/vpp_plugins /usr/lib/vpp_plugins
+COPY --from=vpp /usr/share/vpp /usr/share/vpp
+COPY --from=vpp /opt/dpdk /opt/dpdk
+COPY --from=vpp /usr/lib/libdaq* /usr/lib/
+RUN apk add --no-cache pax-utils procps util-linux libnl3 libmnl numactl libpcap \
+    libelf libunwind openssl zlib lz4-libs libstdc++ libgcc jansson libbsd \
+    libarchive libatomic isa-l rdma-core && \
+    addgroup -S redis && adduser -S -D -H -G redis redis && \
+    mkdir -p /usr/share/sdn-agent/frr /var/lib/sdn-agent /var/lib/redis /etc/sdn-agent /etc/vpp /run/vpp/log && \
+    cp /etc/frr/daemons /usr/share/sdn-agent/frr/daemons
+COPY --from=redis /usr/local/bin/redis-server /usr/local/bin/redis-cli /usr/local/bin/
+COPY --from=agent-build /out/ /usr/local/bin/
+COPY --from=vpp /usr/local/lib/sdn-agent/vpp_papi /usr/local/lib/sdn-agent/vpp_papi
+COPY --from=vpp /usr/local/lib/sdn-agent/vpp /usr/local/lib/sdn-agent/vpp
+COPY sdn-agent/docker/frr.conf sdn-agent/docker/vtysh.conf /usr/share/sdn-agent/frr/
+COPY sdn-agent/docker/entrypoint.sh /usr/local/bin/sdn-agent-entrypoint
+COPY sdn-agent/docker/healthcheck.sh /usr/local/bin/sdn-agent-healthcheck
+COPY sdn-agent/docker/supervisor.py /usr/local/lib/sdn-agent/supervisor.py
+COPY sdn-agent/docker/agent.conf /etc/sdn-agent/agent.conf
+COPY sdn-agent/docker/vpp/startup.conf /etc/vpp/startup.conf
+ENV PYTHONPATH=/usr/local/lib/sdn-agent LD_LIBRARY_PATH=/usr/lib:/opt/dpdk/lib
+RUN chmod 755 /usr/local/bin/sdn-agent-entrypoint /usr/local/bin/sdn-agent-healthcheck && \
+    test -x /usr/bin/vpp && \
+    missing="$(find /opt/dpdk/lib -type f -name '*.so*' -exec ldd '{}' ';' 2>&1 \
+      | grep 'Error loading shared library' || true)" && \
+    { test -z "$missing" || { printf '%s\n' "$missing" >&2; exit 1; }; }
+EXPOSE 9090
+STOPSIGNAL SIGTERM
+HEALTHCHECK --interval=10s --timeout=10s --start-period=90s --retries=3 \
+    CMD /usr/local/bin/sdn-agent-healthcheck
+ENTRYPOINT ["/sbin/tini", "--", "/usr/local/bin/sdn-agent-entrypoint"]
+CMD ["-config", "/etc/sdn-agent/agent.conf"]

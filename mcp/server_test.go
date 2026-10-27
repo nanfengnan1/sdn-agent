@@ -169,6 +169,13 @@ func newFixture(t *testing.T, a *testAgent, opts sdnmcp.Options) *fixture {
 	if a == nil {
 		a = &testAgent{}
 	}
+	f := newServiceFixture(t, a, opts)
+	f.agent = a
+	return f
+}
+
+func newServiceFixture(t *testing.T, a pb.AgentServer, opts sdnmcp.Options) *fixture {
+	t.Helper()
 	if opts.Timeout == 0 {
 		opts.Timeout = 3 * time.Second
 	}
@@ -202,7 +209,7 @@ func newFixture(t *testing.T, a *testAgent, opts sdnmcp.Options) *fixture {
 	if cs.InitializeResult() == nil {
 		t.Fatal("MCP initialize did not complete")
 	}
-	return &fixture{t, ctx, cs, a}
+	return &fixture{t: t, ctx: ctx, client: cs}
 }
 
 func (f *fixture) call(name string, args map[string]any) (*sdk.CallToolResult, error) {

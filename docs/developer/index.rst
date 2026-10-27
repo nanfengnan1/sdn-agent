@@ -26,6 +26,7 @@ AI 工具接入与扩展见 :doc:`MCP 适配层设计 <mcp>`；它通过公开 g
    resources
    execution-storage
    adapters
+   vpp
    mcp
    testing
    release
@@ -39,6 +40,6 @@ AI 工具接入与扩展见 :doc:`MCP 适配层设计 <mcp>`；它通过公开 g
 * Undo 在调用 Apply 前持久化；失败与进程恢复都以保存的 Undo 补偿。
 * 回滚逆序执行，在第一处失败停止；RetryRollback 只重试 Undo。
 * Running 是成功操作日志，Operational 是实际回读，二者不可互相替代。
-* 当前驱动是进程内 Go 对象，Linux / FRR 之外的驱动和远程注册协议尚未交付。
+* 驱动以进程内 Go 对象注册；VPP composite 另调用本机 Python / Binary API 适配进程，见 :doc:`vpp`。远程动态注册协议尚未交付。
 
 运行软件请从 :doc:`用户指南 </user/index>` 开始。
