@@ -31,6 +31,12 @@ func TestCapabilitiesCoverProtocolOperations(t *testing.T) {
 		}
 	}
 	for n, name := range pb.OpCode_name {
+		if pb.OpCode(n) == pb.OpCode_NEIGHBOR_KEEPALIVE {
+			if covered[pb.OpCode(n)] {
+				t.Fatal("Linux must not advertise VPP neighbor keepalive")
+			}
+			continue
+		}
 		if n != 0 && !covered[pb.OpCode(n)] {
 			t.Errorf("protocol operation %s has no backend", name)
 		}

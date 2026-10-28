@@ -108,6 +108,18 @@ class BuildInputsTests(unittest.TestCase):
         self.assertIn("FRR_IMAGE=test/frr:custom", bundle)
         self.assertIn("test/agent:custom", bundle)
 
+    def test_default_git_build_selects_sdn_vpp_branch_and_frr_tag(self):
+        result = self.run_build(BUILD_BASES="1")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        frr, vpp, bundle = self.calls()
+        self.assertIn("FRR_REF=frr-10.7.0", frr)
+        self.assertIn("VPP_REF=sdn/v26.06", vpp)
+        self.assertIn("VPP_REPOSITORY=https://github.com/nanfengnan1/vpp.git", vpp)
+        self.assertIn("FRR_REPOSITORY=https://github.com/nanfengnan1/frr.git", frr)
+        self.assertIn("VPP_SOURCE_MODE=git", vpp)
+        self.assertNotIn("--build-context", vpp)
+        self.assertIn("VPP_IMAGE=alpine/vpp:sdn-base", bundle)
+
     def test_local_paths_with_spaces_are_single_arguments(self):
         source = self.root / "local checkout"
         source.mkdir()
@@ -144,7 +156,6 @@ class BuildInputsTests(unittest.TestCase):
 
     def test_invalid_input_fails_before_any_build(self):
         for settings in (
-            {"BUILD_BASES": "1"},
             {"BUILD_BASES": "yes"},
             {"BUILD_JOBS": "00"},
             {"BUILD_JOBS": "-2"},
@@ -179,10 +190,14 @@ class SourceFixture(unittest.TestCase):
         files = {
             "extras/sdn-agent/adapter.py": "# fixture\n",
             "extras/sdn-agent/irb.py": "# fixture\n",
+            "extras/sdn-agent/keepalive.py": "# fixture\n",
+            "src/plugins/neighbor_keepalive/neighbor_keepalive.c": "/* fixture */\n",
+            "src/plugins/neighbor_keepalive/neighbor_keepalive.api": "neighbor_keepalive_set neighbor_keepalive_status neighbor_keepalive_dump\n",
             "src/vpp-api/python/vpp_papi/__init__.py": "# fixture\n",
             "src/plugins/vxlan/multipoint.c": "/* fixture */\n",
             "src/plugins/vxlan/vxlan.api": "vxlan_mp_remote_add_del_v2 vxlan_mp_remote_v2_dump\n",
             "src/vnet/l2/l2.api": "l2_egress_flood\n",
+            "src/vnet/ip6-nd/ip6_nd.c": "ip_neighbor_confirm_dp\n",
             "build/external/packages/dpdk.mk": "dpdk_version := 26.03\n",
             "bootstrap.sh": "#!/bin/sh\n",
             "configure.ac": "# fixture\n",
@@ -201,6 +216,7 @@ class SourceFixture(unittest.TestCase):
         self.git("add", ".")
         self.git("commit", "-qm", "fixture next")
         self.head = self.git("rev-parse", "HEAD").strip()
+        self.git("branch", "sdn/v26.06")
 
     def git(self, *args):
         return subprocess.check_output(
@@ -224,7 +240,12 @@ class SourceFixture(unittest.TestCase):
 class SourceFetchTests(SourceFixture):
     def test_tag_branch_and_commit_select_actual_requested_revision(self):
         for index, (ref, expected) in enumerate(
-            (("v26.06", self.first), ("main", self.head), (self.first, self.first))
+            (
+                ("v26.06", self.first),
+                ("main", self.head),
+                ("sdn/v26.06", self.head),
+                (self.first, self.first),
+            )
         ):
             with self.subTest(ref=ref):
                 dest = self.root / f"checkout {index}"

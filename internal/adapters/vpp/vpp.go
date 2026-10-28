@@ -71,12 +71,18 @@ type undo struct {
 
 func (d *Driver) Name() string { return "vpp" }
 func (d *Driver) Codes() []pb.OpCode {
-	return []pb.OpCode{pb.OpCode_NODE_NETWORK, pb.OpCode_INTERFACE, pb.OpCode_ADDRESS, pb.OpCode_TENANT, pb.OpCode_BD, pb.OpCode_BD_PORT, pb.OpCode_BD_TENANT, pb.OpCode_TENANT_L3VNI, pb.OpCode_VXLAN, pb.OpCode_STATIC_ROUTE}
+	return []pb.OpCode{pb.OpCode_NEIGHBOR_KEEPALIVE, pb.OpCode_NODE_NETWORK, pb.OpCode_INTERFACE, pb.OpCode_ADDRESS, pb.OpCode_TENANT, pb.OpCode_BD, pb.OpCode_BD_PORT, pb.OpCode_BD_TENANT, pb.OpCode_TENANT_L3VNI, pb.OpCode_VXLAN, pb.OpCode_STATIC_ROUTE}
 }
 func (d *Driver) Features() []string {
-	return []string{"dataplane/vpp-26.06", "evpn-l2/v1", "evpn-irb/v1", "vxlan-multipoint/v1", "vxlan-dualstack/v1", "vxlan-software-gso/v1", "linux-control-mirror/v1"}
+	return []string{"dataplane/vpp-26.06", "neighbor-keepalive/v1", "evpn-l2/v1", "evpn-irb/v1", "vxlan-multipoint/v1", "vxlan-dualstack/v1", "vxlan-software-gso/v1", "linux-control-mirror/v1"}
 }
 func (d *Driver) Validate(o *pb.Operation) error {
+	if o.Code == pb.OpCode_NEIGHBOR_KEEPALIVE {
+		if o.Action != pb.Action_SET || o.GetNeighborKeepalive() == nil || o.GetNeighborKeepalive().Enabled == nil {
+			return fmt.Errorf("VPP neighbor keepalive requires SET and explicit enabled boolean")
+		}
+		return nil
+	}
 	if o.Code == pb.OpCode_TENANT_L3VNI {
 		return (&frr.Driver{}).Validate(o)
 	}
@@ -109,7 +115,7 @@ func (d *Driver) Prepare(ctx context.Context, o *pb.Operation) (*model.Undo, err
 	}
 	l := &model.Undo{}
 	var e error
-	if o.Code != pb.OpCode_TENANT_L3VNI {
+	if o.Code != pb.OpCode_TENANT_L3VNI && o.Code != pb.OpCode_NEIGHBOR_KEEPALIVE {
 		l, e = d.Linux.Prepare(ctx, o)
 	}
 	if e != nil {
@@ -127,7 +133,7 @@ func (d *Driver) Prepare(ctx context.Context, o *pb.Operation) (*model.Undo, err
 	return &model.Undo{Data: data}, e
 }
 func (d *Driver) Apply(ctx context.Context, o *pb.Operation) error {
-	if o.Code != pb.OpCode_TENANT_L3VNI {
+	if o.Code != pb.OpCode_TENANT_L3VNI && o.Code != pb.OpCode_NEIGHBOR_KEEPALIVE {
 		if e := d.Linux.Apply(ctx, o); e != nil {
 			return e
 		}
@@ -139,7 +145,7 @@ func (d *Driver) Apply(ctx context.Context, o *pb.Operation) error {
 	return d.RPC.Call(ctx, "apply", b, nil)
 }
 func (d *Driver) Verify(ctx context.Context, o *pb.Operation) error {
-	if o.Code != pb.OpCode_TENANT_L3VNI {
+	if o.Code != pb.OpCode_TENANT_L3VNI && o.Code != pb.OpCode_NEIGHBOR_KEEPALIVE {
 		if e := d.Linux.Verify(ctx, o); e != nil {
 			return e
 		}
@@ -164,7 +170,7 @@ func (d *Driver) Rollback(ctx context.Context, o *pb.Operation, u *model.Undo) e
 	if e := d.RPC.Call(ctx, "rollback", before.VPP, nil); e != nil {
 		return e
 	}
-	if o.Code != pb.OpCode_TENANT_L3VNI {
+	if o.Code != pb.OpCode_TENANT_L3VNI && o.Code != pb.OpCode_NEIGHBOR_KEEPALIVE {
 		if e := d.Linux.Rollback(ctx, o, before.Linux); e != nil {
 			return e
 		}
@@ -195,9 +201,9 @@ func (d *Driver) Observe(ctx context.Context) (map[string]string, error) {
 }
 func (d *Driver) QueryCapabilities() []*pb.QueryCapability {
 	var out []*pb.QueryCapability
-	for _, k := range []pb.QueryKind{pb.QueryKind_TENANTS, pb.QueryKind_BRIDGES, pb.QueryKind_PORTS, pb.QueryKind_INTERFACES, pb.QueryKind_ADDRESSES, pb.QueryKind_NEIGHBORS, pb.QueryKind_ROUTES, pb.QueryKind_FDB, pb.QueryKind_VXLAN_TUNNELS} {
+	for _, k := range []pb.QueryKind{pb.QueryKind_NEIGHBOR_KEEPALIVE_STATUS, pb.QueryKind_TENANTS, pb.QueryKind_BRIDGES, pb.QueryKind_PORTS, pb.QueryKind_INTERFACES, pb.QueryKind_ADDRESSES, pb.QueryKind_NEIGHBORS, pb.QueryKind_ROUTES, pb.QueryKind_FDB, pb.QueryKind_VXLAN_TUNNELS} {
 		capability := &pb.QueryCapability{Kind: k}
-		if k == pb.QueryKind_ADDRESSES || k == pb.QueryKind_NEIGHBORS || k == pb.QueryKind_ROUTES || k == pb.QueryKind_VXLAN_TUNNELS {
+		if k == pb.QueryKind_NEIGHBOR_KEEPALIVE_STATUS || k == pb.QueryKind_ADDRESSES || k == pb.QueryKind_NEIGHBORS || k == pb.QueryKind_ROUTES || k == pb.QueryKind_VXLAN_TUNNELS {
 			capability.Families = []pb.AddressFamily{pb.AddressFamily_IPV4, pb.AddressFamily_IPV6}
 		}
 		out = append(out, capability)

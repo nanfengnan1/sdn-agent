@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-# Context: sdn-agent/docker. git mode reads VPP_REPOSITORY + VPP_REF;
+# Context: sdn-agent/docker. git mode defaults to nanfengnan1/vpp sdn/v26.06;
 # local mode requires vpp_source=/path/to/checkout and vpp_git=/path/to/checkout/.git contexts.
 
 ARG ALPINE_VERSION=3.22
@@ -10,7 +10,7 @@ RUN apk add --no-cache bash build-base clang cmake ninja git curl ca-certificate
 
 FROM build-deps AS source-git
 ARG VPP_REPOSITORY=https://github.com/nanfengnan1/vpp.git
-ARG VPP_REF
+ARG VPP_REF=sdn/v26.06
 ARG SOURCE_CACHE_BUST=0
 COPY vpp/fetch-source.sh /build-tools/fetch-source.sh
 RUN : "$SOURCE_CACHE_BUST" && sh /build-tools/fetch-source.sh "$VPP_REPOSITORY" "$VPP_REF" /src/vpp
@@ -23,7 +23,7 @@ COPY --from=vpp_git . .git/
 
 FROM source-${VPP_SOURCE_MODE} AS source
 ARG VPP_REPOSITORY=https://github.com/nanfengnan1/vpp.git
-ARG VPP_REF=local
+ARG VPP_REF=sdn/v26.06
 WORKDIR /src/vpp
 COPY vpp/source-metadata.py /build-tools/source-metadata.py
 RUN python3 /build-tools/source-metadata.py vpp /src/vpp /source-metadata "$VPP_REPOSITORY" "$VPP_REF"
@@ -153,7 +153,7 @@ RUN --mount=type=cache,target=/root/.cache/ccache \
     && cp /source-metadata/source.patch /install/usr/share/vpp/sdn-source.patch \
     && mkdir -p /install/usr/local/lib/sdn-agent/vpp \
     && cp -a src/vpp-api/python/vpp_papi /install/usr/local/lib/sdn-agent/vpp_papi \
-    && cp extras/sdn-agent/adapter.py extras/sdn-agent/irb.py /install/usr/local/lib/sdn-agent/vpp/ \
+    && cp extras/sdn-agent/adapter.py extras/sdn-agent/irb.py extras/sdn-agent/keepalive.py /install/usr/local/lib/sdn-agent/vpp/ \
     && cp /dpdk-version /install/usr/share/vpp/dpdk-version \
     && cp /vpp-alpine.patch /install/usr/share/vpp/alpine-compat.patch \
     && cp /libdaq-source.sha256 /install/usr/share/vpp/libdaq-source.sha256 \
@@ -180,7 +180,7 @@ COPY --from=build /install/opt/ /opt/
 
 COPY vpp/startup.conf /etc/vpp/startup.conf
 ARG VPP_REPOSITORY=https://github.com/nanfengnan1/vpp.git
-ARG VPP_REF=local
+ARG VPP_REF=sdn/v26.06
 LABEL org.opencontainers.image.title="VPP on Alpine" \
       org.opencontainers.image.source="${VPP_REPOSITORY}" \
       io.sdn.source.ref="${VPP_REF}"

@@ -15,7 +15,12 @@ import traceback
 
 ROOT = Path(__file__).resolve().parents[1]
 UNDERLAY6 = os.environ.get("SDN_VPP_UNDERLAY") == "6"
-OUT = ROOT / "artifacts" / "vpp" / ("dual-ipv6" if UNDERLAY6 else ".")
+OUT = Path(
+    os.environ.get(
+        "SDN_VPP_OUTPUT",
+        ROOT / "artifacts" / "vpp" / ("dual-ipv6" if UNDERLAY6 else "."),
+    )
+).resolve()
 OUT.mkdir(parents=True, exist_ok=True)
 STAMP = "sdn-vpp-it-" + str(int(time.time()))
 IMAGE = os.environ.get("SDN_VPP_IMAGE", "alpine/sdn-agent:vpp-dev")

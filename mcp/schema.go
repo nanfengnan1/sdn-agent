@@ -164,6 +164,7 @@ var operationPayloads = []struct {
 	code  pb.OpCode
 	field string
 }{
+	{pb.OpCode_NEIGHBOR_KEEPALIVE, "neighbor_keepalive"},
 	{pb.OpCode_NODE_NETWORK, "network"}, {pb.OpCode_INTERFACE, "interface"},
 	{pb.OpCode_ADDRESS, "address"}, {pb.OpCode_TENANT, "tenant"}, {pb.OpCode_BD, "bridge"},
 	{pb.OpCode_BD_PORT, "bridge_port"}, {pb.OpCode_BD_TENANT, "binding"},

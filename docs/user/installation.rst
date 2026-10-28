@@ -40,7 +40,7 @@ Agent 的本地数据面运行平台为 **Linux**，当前验收架构为 **x86_
      - Alpine 源码镜像；已有资源验收覆盖 IPv4 / IPv6、OSPFv2 / v3、BGP / EVPN、Type-5、查询与回滚场景
    * - VPP 数据面实验基线
      - VPP 26.06 / FRR 10.7.0，Alpine 3.22
-     - 本地适配源码镜像；EVPN / 对称 IRB、双栈、软件 GSO 和 Huawei VF 实验，范围见 :doc:`vpp`；推送后的 GitHub 源码构建待验证
+     - nanfengnan1/vpp 的 sdn/v26.06 分支与 FRR frr-10.7.0；已验证 GitHub 源码构建，EVPN / 对称 IRB、双栈及此前软件 GSO / Huawei VF 实验的范围见 :doc:`vpp`
    * - FRR 历史回归基线
      - quay.io/frrouting/frr:10.0.0（CLI 显示 10.0_git）
      - 2026-10-24 的 IPv4 VXLAN / EVPN 与事务恢复实验；不据此宣称后来新增能力已在该版本重新验收

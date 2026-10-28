@@ -83,33 +83,34 @@ func (Action) EnumDescriptor() ([]byte, []int) {
 type OpCode int32
 
 const (
-	OpCode_OP_UNSPECIFIED   OpCode = 0
-	OpCode_NODE_NETWORK     OpCode = 1
-	OpCode_INTERFACE        OpCode = 2
-	OpCode_ADDRESS          OpCode = 3
-	OpCode_TENANT           OpCode = 4
-	OpCode_BD               OpCode = 5
-	OpCode_BD_PORT          OpCode = 6
-	OpCode_BD_TENANT        OpCode = 7
-	OpCode_VXLAN            OpCode = 8
-	OpCode_STATIC_ROUTE     OpCode = 9
-	OpCode_OSPF_INSTANCE    OpCode = 20
-	OpCode_OSPF_NETWORK     OpCode = 21
-	OpCode_OSPF_INTERFACE   OpCode = 22
-	OpCode_OSPF6_INSTANCE   OpCode = 23
-	OpCode_OSPF6_INTERFACE  OpCode = 24
-	OpCode_BGP_INSTANCE     OpCode = 30
-	OpCode_BGP_PEER_GROUP   OpCode = 31
-	OpCode_BGP_NEIGHBOR     OpCode = 32
-	OpCode_BGP_EVPN_PEER    OpCode = 33
-	OpCode_BGP_EVPN_GLOBAL  OpCode = 34
-	OpCode_EVPN_L2VNI       OpCode = 35
-	OpCode_EVPN_TENANT      OpCode = 36
-	OpCode_TENANT_L3VNI     OpCode = 37
-	OpCode_BGP_AF_PEER      OpCode = 38
-	OpCode_BGP_NETWORK      OpCode = 39
-	OpCode_BGP_REDISTRIBUTE OpCode = 40
-	OpCode_EVPN_TYPE5       OpCode = 41
+	OpCode_OP_UNSPECIFIED     OpCode = 0
+	OpCode_NODE_NETWORK       OpCode = 1
+	OpCode_INTERFACE          OpCode = 2
+	OpCode_ADDRESS            OpCode = 3
+	OpCode_TENANT             OpCode = 4
+	OpCode_BD                 OpCode = 5
+	OpCode_BD_PORT            OpCode = 6
+	OpCode_BD_TENANT          OpCode = 7
+	OpCode_VXLAN              OpCode = 8
+	OpCode_STATIC_ROUTE       OpCode = 9
+	OpCode_NEIGHBOR_KEEPALIVE OpCode = 10
+	OpCode_OSPF_INSTANCE      OpCode = 20
+	OpCode_OSPF_NETWORK       OpCode = 21
+	OpCode_OSPF_INTERFACE     OpCode = 22
+	OpCode_OSPF6_INSTANCE     OpCode = 23
+	OpCode_OSPF6_INTERFACE    OpCode = 24
+	OpCode_BGP_INSTANCE       OpCode = 30
+	OpCode_BGP_PEER_GROUP     OpCode = 31
+	OpCode_BGP_NEIGHBOR       OpCode = 32
+	OpCode_BGP_EVPN_PEER      OpCode = 33
+	OpCode_BGP_EVPN_GLOBAL    OpCode = 34
+	OpCode_EVPN_L2VNI         OpCode = 35
+	OpCode_EVPN_TENANT        OpCode = 36
+	OpCode_TENANT_L3VNI       OpCode = 37
+	OpCode_BGP_AF_PEER        OpCode = 38
+	OpCode_BGP_NETWORK        OpCode = 39
+	OpCode_BGP_REDISTRIBUTE   OpCode = 40
+	OpCode_EVPN_TYPE5         OpCode = 41
 )
 
 // Enum value maps for OpCode.
@@ -125,6 +126,7 @@ var (
 		7:  "BD_TENANT",
 		8:  "VXLAN",
 		9:  "STATIC_ROUTE",
+		10: "NEIGHBOR_KEEPALIVE",
 		20: "OSPF_INSTANCE",
 		21: "OSPF_NETWORK",
 		22: "OSPF_INTERFACE",
@@ -144,33 +146,34 @@ var (
 		41: "EVPN_TYPE5",
 	}
 	OpCode_value = map[string]int32{
-		"OP_UNSPECIFIED":   0,
-		"NODE_NETWORK":     1,
-		"INTERFACE":        2,
-		"ADDRESS":          3,
-		"TENANT":           4,
-		"BD":               5,
-		"BD_PORT":          6,
-		"BD_TENANT":        7,
-		"VXLAN":            8,
-		"STATIC_ROUTE":     9,
-		"OSPF_INSTANCE":    20,
-		"OSPF_NETWORK":     21,
-		"OSPF_INTERFACE":   22,
-		"OSPF6_INSTANCE":   23,
-		"OSPF6_INTERFACE":  24,
-		"BGP_INSTANCE":     30,
-		"BGP_PEER_GROUP":   31,
-		"BGP_NEIGHBOR":     32,
-		"BGP_EVPN_PEER":    33,
-		"BGP_EVPN_GLOBAL":  34,
-		"EVPN_L2VNI":       35,
-		"EVPN_TENANT":      36,
-		"TENANT_L3VNI":     37,
-		"BGP_AF_PEER":      38,
-		"BGP_NETWORK":      39,
-		"BGP_REDISTRIBUTE": 40,
-		"EVPN_TYPE5":       41,
+		"OP_UNSPECIFIED":     0,
+		"NODE_NETWORK":       1,
+		"INTERFACE":          2,
+		"ADDRESS":            3,
+		"TENANT":             4,
+		"BD":                 5,
+		"BD_PORT":            6,
+		"BD_TENANT":          7,
+		"VXLAN":              8,
+		"STATIC_ROUTE":       9,
+		"NEIGHBOR_KEEPALIVE": 10,
+		"OSPF_INSTANCE":      20,
+		"OSPF_NETWORK":       21,
+		"OSPF_INTERFACE":     22,
+		"OSPF6_INSTANCE":     23,
+		"OSPF6_INTERFACE":    24,
+		"BGP_INSTANCE":       30,
+		"BGP_PEER_GROUP":     31,
+		"BGP_NEIGHBOR":       32,
+		"BGP_EVPN_PEER":      33,
+		"BGP_EVPN_GLOBAL":    34,
+		"EVPN_L2VNI":         35,
+		"EVPN_TENANT":        36,
+		"TENANT_L3VNI":       37,
+		"BGP_AF_PEER":        38,
+		"BGP_NETWORK":        39,
+		"BGP_REDISTRIBUTE":   40,
+		"EVPN_TYPE5":         41,
 	}
 )
 
@@ -256,26 +259,27 @@ func (AddressFamily) EnumDescriptor() ([]byte, []int) {
 type QueryKind int32
 
 const (
-	QueryKind_QUERY_UNSPECIFIED QueryKind = 0
-	QueryKind_TENANTS           QueryKind = 1
-	QueryKind_BRIDGES           QueryKind = 2
-	QueryKind_INTERFACES        QueryKind = 3
-	QueryKind_ADDRESSES         QueryKind = 4
-	QueryKind_ROUTES            QueryKind = 5
-	QueryKind_FDB               QueryKind = 6
-	QueryKind_NEIGHBORS         QueryKind = 7
-	QueryKind_VXLAN_TUNNELS     QueryKind = 8
-	QueryKind_BGP_SUMMARY       QueryKind = 9
-	QueryKind_BGP_NEIGHBORS     QueryKind = 10
-	QueryKind_BGP_ROUTES        QueryKind = 11
-	QueryKind_EVPN_ROUTES       QueryKind = 12
-	QueryKind_EVPN_VNI          QueryKind = 13
-	QueryKind_OSPF_SUMMARY      QueryKind = 14
-	QueryKind_OSPF_INTERFACES   QueryKind = 15
-	QueryKind_OSPF_NEIGHBORS    QueryKind = 16
-	QueryKind_OSPF_DATABASE     QueryKind = 17
-	QueryKind_OSPF_ROUTES       QueryKind = 18
-	QueryKind_PORTS             QueryKind = 19
+	QueryKind_QUERY_UNSPECIFIED         QueryKind = 0
+	QueryKind_TENANTS                   QueryKind = 1
+	QueryKind_BRIDGES                   QueryKind = 2
+	QueryKind_INTERFACES                QueryKind = 3
+	QueryKind_ADDRESSES                 QueryKind = 4
+	QueryKind_ROUTES                    QueryKind = 5
+	QueryKind_FDB                       QueryKind = 6
+	QueryKind_NEIGHBORS                 QueryKind = 7
+	QueryKind_VXLAN_TUNNELS             QueryKind = 8
+	QueryKind_BGP_SUMMARY               QueryKind = 9
+	QueryKind_BGP_NEIGHBORS             QueryKind = 10
+	QueryKind_BGP_ROUTES                QueryKind = 11
+	QueryKind_EVPN_ROUTES               QueryKind = 12
+	QueryKind_EVPN_VNI                  QueryKind = 13
+	QueryKind_OSPF_SUMMARY              QueryKind = 14
+	QueryKind_OSPF_INTERFACES           QueryKind = 15
+	QueryKind_OSPF_NEIGHBORS            QueryKind = 16
+	QueryKind_OSPF_DATABASE             QueryKind = 17
+	QueryKind_OSPF_ROUTES               QueryKind = 18
+	QueryKind_PORTS                     QueryKind = 19
+	QueryKind_NEIGHBOR_KEEPALIVE_STATUS QueryKind = 20
 )
 
 // Enum value maps for QueryKind.
@@ -301,28 +305,30 @@ var (
 		17: "OSPF_DATABASE",
 		18: "OSPF_ROUTES",
 		19: "PORTS",
+		20: "NEIGHBOR_KEEPALIVE_STATUS",
 	}
 	QueryKind_value = map[string]int32{
-		"QUERY_UNSPECIFIED": 0,
-		"TENANTS":           1,
-		"BRIDGES":           2,
-		"INTERFACES":        3,
-		"ADDRESSES":         4,
-		"ROUTES":            5,
-		"FDB":               6,
-		"NEIGHBORS":         7,
-		"VXLAN_TUNNELS":     8,
-		"BGP_SUMMARY":       9,
-		"BGP_NEIGHBORS":     10,
-		"BGP_ROUTES":        11,
-		"EVPN_ROUTES":       12,
-		"EVPN_VNI":          13,
-		"OSPF_SUMMARY":      14,
-		"OSPF_INTERFACES":   15,
-		"OSPF_NEIGHBORS":    16,
-		"OSPF_DATABASE":     17,
-		"OSPF_ROUTES":       18,
-		"PORTS":             19,
+		"QUERY_UNSPECIFIED":         0,
+		"TENANTS":                   1,
+		"BRIDGES":                   2,
+		"INTERFACES":                3,
+		"ADDRESSES":                 4,
+		"ROUTES":                    5,
+		"FDB":                       6,
+		"NEIGHBORS":                 7,
+		"VXLAN_TUNNELS":             8,
+		"BGP_SUMMARY":               9,
+		"BGP_NEIGHBORS":             10,
+		"BGP_ROUTES":                11,
+		"EVPN_ROUTES":               12,
+		"EVPN_VNI":                  13,
+		"OSPF_SUMMARY":              14,
+		"OSPF_INTERFACES":           15,
+		"OSPF_NEIGHBORS":            16,
+		"OSPF_DATABASE":             17,
+		"OSPF_ROUTES":               18,
+		"PORTS":                     19,
+		"NEIGHBOR_KEEPALIVE_STATUS": 20,
 	}
 )
 
@@ -457,6 +463,51 @@ func (x *Network) GetSettings() []*Sysctl {
 	return nil
 }
 
+// VPP-only node policy. Explicit false disables probing without flushing state.
+type NeighborKeepalive struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Enabled       *bool                  `protobuf:"varint,1,opt,name=enabled,proto3,oneof" json:"enabled,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *NeighborKeepalive) Reset() {
+	*x = NeighborKeepalive{}
+	mi := &file_api_agent_v1_agent_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *NeighborKeepalive) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*NeighborKeepalive) ProtoMessage() {}
+
+func (x *NeighborKeepalive) ProtoReflect() protoreflect.Message {
+	mi := &file_api_agent_v1_agent_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use NeighborKeepalive.ProtoReflect.Descriptor instead.
+func (*NeighborKeepalive) Descriptor() ([]byte, []int) {
+	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *NeighborKeepalive) GetEnabled() bool {
+	if x != nil && x.Enabled != nil {
+		return *x.Enabled
+	}
+	return false
+}
+
 type Interface struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -470,7 +521,7 @@ type Interface struct {
 
 func (x *Interface) Reset() {
 	*x = Interface{}
-	mi := &file_api_agent_v1_agent_proto_msgTypes[2]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -482,7 +533,7 @@ func (x *Interface) String() string {
 func (*Interface) ProtoMessage() {}
 
 func (x *Interface) ProtoReflect() protoreflect.Message {
-	mi := &file_api_agent_v1_agent_proto_msgTypes[2]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -495,7 +546,7 @@ func (x *Interface) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Interface.ProtoReflect.Descriptor instead.
 func (*Interface) Descriptor() ([]byte, []int) {
-	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{2}
+	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *Interface) GetName() string {
@@ -543,7 +594,7 @@ type Address struct {
 
 func (x *Address) Reset() {
 	*x = Address{}
-	mi := &file_api_agent_v1_agent_proto_msgTypes[3]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -555,7 +606,7 @@ func (x *Address) String() string {
 func (*Address) ProtoMessage() {}
 
 func (x *Address) ProtoReflect() protoreflect.Message {
-	mi := &file_api_agent_v1_agent_proto_msgTypes[3]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -568,7 +619,7 @@ func (x *Address) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Address.ProtoReflect.Descriptor instead.
 func (*Address) Descriptor() ([]byte, []int) {
-	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{3}
+	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *Address) GetInterface() string {
@@ -595,7 +646,7 @@ type Tenant struct {
 
 func (x *Tenant) Reset() {
 	*x = Tenant{}
-	mi := &file_api_agent_v1_agent_proto_msgTypes[4]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -607,7 +658,7 @@ func (x *Tenant) String() string {
 func (*Tenant) ProtoMessage() {}
 
 func (x *Tenant) ProtoReflect() protoreflect.Message {
-	mi := &file_api_agent_v1_agent_proto_msgTypes[4]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -620,7 +671,7 @@ func (x *Tenant) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Tenant.ProtoReflect.Descriptor instead.
 func (*Tenant) Descriptor() ([]byte, []int) {
-	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{4}
+	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *Tenant) GetName() string {
@@ -650,7 +701,7 @@ type Bridge struct {
 
 func (x *Bridge) Reset() {
 	*x = Bridge{}
-	mi := &file_api_agent_v1_agent_proto_msgTypes[5]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -662,7 +713,7 @@ func (x *Bridge) String() string {
 func (*Bridge) ProtoMessage() {}
 
 func (x *Bridge) ProtoReflect() protoreflect.Message {
-	mi := &file_api_agent_v1_agent_proto_msgTypes[5]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -675,7 +726,7 @@ func (x *Bridge) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Bridge.ProtoReflect.Descriptor instead.
 func (*Bridge) Descriptor() ([]byte, []int) {
-	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{5}
+	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *Bridge) GetName() string {
@@ -725,7 +776,7 @@ type BridgePort struct {
 
 func (x *BridgePort) Reset() {
 	*x = BridgePort{}
-	mi := &file_api_agent_v1_agent_proto_msgTypes[6]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -737,7 +788,7 @@ func (x *BridgePort) String() string {
 func (*BridgePort) ProtoMessage() {}
 
 func (x *BridgePort) ProtoReflect() protoreflect.Message {
-	mi := &file_api_agent_v1_agent_proto_msgTypes[6]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -750,7 +801,7 @@ func (x *BridgePort) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BridgePort.ProtoReflect.Descriptor instead.
 func (*BridgePort) Descriptor() ([]byte, []int) {
-	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{6}
+	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *BridgePort) GetBridge() string {
@@ -791,7 +842,7 @@ type Binding struct {
 
 func (x *Binding) Reset() {
 	*x = Binding{}
-	mi := &file_api_agent_v1_agent_proto_msgTypes[7]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -803,7 +854,7 @@ func (x *Binding) String() string {
 func (*Binding) ProtoMessage() {}
 
 func (x *Binding) ProtoReflect() protoreflect.Message {
-	mi := &file_api_agent_v1_agent_proto_msgTypes[7]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -816,7 +867,7 @@ func (x *Binding) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Binding.ProtoReflect.Descriptor instead.
 func (*Binding) Descriptor() ([]byte, []int) {
-	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{7}
+	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *Binding) GetBridge() string {
@@ -847,7 +898,7 @@ type Vxlan struct {
 
 func (x *Vxlan) Reset() {
 	*x = Vxlan{}
-	mi := &file_api_agent_v1_agent_proto_msgTypes[8]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -859,7 +910,7 @@ func (x *Vxlan) String() string {
 func (*Vxlan) ProtoMessage() {}
 
 func (x *Vxlan) ProtoReflect() protoreflect.Message {
-	mi := &file_api_agent_v1_agent_proto_msgTypes[8]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -872,7 +923,7 @@ func (x *Vxlan) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Vxlan.ProtoReflect.Descriptor instead.
 func (*Vxlan) Descriptor() ([]byte, []int) {
-	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{8}
+	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *Vxlan) GetName() string {
@@ -929,7 +980,7 @@ type Route struct {
 
 func (x *Route) Reset() {
 	*x = Route{}
-	mi := &file_api_agent_v1_agent_proto_msgTypes[9]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -941,7 +992,7 @@ func (x *Route) String() string {
 func (*Route) ProtoMessage() {}
 
 func (x *Route) ProtoReflect() protoreflect.Message {
-	mi := &file_api_agent_v1_agent_proto_msgTypes[9]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -954,7 +1005,7 @@ func (x *Route) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Route.ProtoReflect.Descriptor instead.
 func (*Route) Descriptor() ([]byte, []int) {
-	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{9}
+	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *Route) GetPrefix() string {
@@ -995,7 +1046,7 @@ type Ospf struct {
 
 func (x *Ospf) Reset() {
 	*x = Ospf{}
-	mi := &file_api_agent_v1_agent_proto_msgTypes[10]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1007,7 +1058,7 @@ func (x *Ospf) String() string {
 func (*Ospf) ProtoMessage() {}
 
 func (x *Ospf) ProtoReflect() protoreflect.Message {
-	mi := &file_api_agent_v1_agent_proto_msgTypes[10]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1020,7 +1071,7 @@ func (x *Ospf) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Ospf.ProtoReflect.Descriptor instead.
 func (*Ospf) Descriptor() ([]byte, []int) {
-	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{10}
+	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *Ospf) GetRouterId() string {
@@ -1048,7 +1099,7 @@ type OspfNetwork struct {
 
 func (x *OspfNetwork) Reset() {
 	*x = OspfNetwork{}
-	mi := &file_api_agent_v1_agent_proto_msgTypes[11]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1060,7 +1111,7 @@ func (x *OspfNetwork) String() string {
 func (*OspfNetwork) ProtoMessage() {}
 
 func (x *OspfNetwork) ProtoReflect() protoreflect.Message {
-	mi := &file_api_agent_v1_agent_proto_msgTypes[11]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1073,7 +1124,7 @@ func (x *OspfNetwork) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OspfNetwork.ProtoReflect.Descriptor instead.
 func (*OspfNetwork) Descriptor() ([]byte, []int) {
-	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{11}
+	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *OspfNetwork) GetPrefix() string {
@@ -1113,7 +1164,7 @@ type OspfInterface struct {
 
 func (x *OspfInterface) Reset() {
 	*x = OspfInterface{}
-	mi := &file_api_agent_v1_agent_proto_msgTypes[12]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1125,7 +1176,7 @@ func (x *OspfInterface) String() string {
 func (*OspfInterface) ProtoMessage() {}
 
 func (x *OspfInterface) ProtoReflect() protoreflect.Message {
-	mi := &file_api_agent_v1_agent_proto_msgTypes[12]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1138,7 +1189,7 @@ func (x *OspfInterface) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OspfInterface.ProtoReflect.Descriptor instead.
 func (*OspfInterface) Descriptor() ([]byte, []int) {
-	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{12}
+	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *OspfInterface) GetName() string {
@@ -1213,7 +1264,7 @@ type Ospf6Interface struct {
 
 func (x *Ospf6Interface) Reset() {
 	*x = Ospf6Interface{}
-	mi := &file_api_agent_v1_agent_proto_msgTypes[13]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1225,7 +1276,7 @@ func (x *Ospf6Interface) String() string {
 func (*Ospf6Interface) ProtoMessage() {}
 
 func (x *Ospf6Interface) ProtoReflect() protoreflect.Message {
-	mi := &file_api_agent_v1_agent_proto_msgTypes[13]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1238,7 +1289,7 @@ func (x *Ospf6Interface) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Ospf6Interface.ProtoReflect.Descriptor instead.
 func (*Ospf6Interface) Descriptor() ([]byte, []int) {
-	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{13}
+	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *Ospf6Interface) GetName() string {
@@ -1309,7 +1360,7 @@ type Bgp struct {
 
 func (x *Bgp) Reset() {
 	*x = Bgp{}
-	mi := &file_api_agent_v1_agent_proto_msgTypes[14]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1321,7 +1372,7 @@ func (x *Bgp) String() string {
 func (*Bgp) ProtoMessage() {}
 
 func (x *Bgp) ProtoReflect() protoreflect.Message {
-	mi := &file_api_agent_v1_agent_proto_msgTypes[14]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1334,7 +1385,7 @@ func (x *Bgp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Bgp.ProtoReflect.Descriptor instead.
 func (*Bgp) Descriptor() ([]byte, []int) {
-	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{14}
+	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *Bgp) GetAsn() uint32 {
@@ -1382,7 +1433,7 @@ type Peer struct {
 
 func (x *Peer) Reset() {
 	*x = Peer{}
-	mi := &file_api_agent_v1_agent_proto_msgTypes[15]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1394,7 +1445,7 @@ func (x *Peer) String() string {
 func (*Peer) ProtoMessage() {}
 
 func (x *Peer) ProtoReflect() protoreflect.Message {
-	mi := &file_api_agent_v1_agent_proto_msgTypes[15]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1407,7 +1458,7 @@ func (x *Peer) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Peer.ProtoReflect.Descriptor instead.
 func (*Peer) Descriptor() ([]byte, []int) {
-	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{15}
+	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *Peer) GetAsn() uint32 {
@@ -1485,7 +1536,7 @@ type BgpNetwork struct {
 
 func (x *BgpNetwork) Reset() {
 	*x = BgpNetwork{}
-	mi := &file_api_agent_v1_agent_proto_msgTypes[16]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1497,7 +1548,7 @@ func (x *BgpNetwork) String() string {
 func (*BgpNetwork) ProtoMessage() {}
 
 func (x *BgpNetwork) ProtoReflect() protoreflect.Message {
-	mi := &file_api_agent_v1_agent_proto_msgTypes[16]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1510,7 +1561,7 @@ func (x *BgpNetwork) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BgpNetwork.ProtoReflect.Descriptor instead.
 func (*BgpNetwork) Descriptor() ([]byte, []int) {
-	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{16}
+	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *BgpNetwork) GetAsn() uint32 {
@@ -1553,7 +1604,7 @@ type BgpRedistribute struct {
 
 func (x *BgpRedistribute) Reset() {
 	*x = BgpRedistribute{}
-	mi := &file_api_agent_v1_agent_proto_msgTypes[17]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1565,7 +1616,7 @@ func (x *BgpRedistribute) String() string {
 func (*BgpRedistribute) ProtoMessage() {}
 
 func (x *BgpRedistribute) ProtoReflect() protoreflect.Message {
-	mi := &file_api_agent_v1_agent_proto_msgTypes[17]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1578,7 +1629,7 @@ func (x *BgpRedistribute) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BgpRedistribute.ProtoReflect.Descriptor instead.
 func (*BgpRedistribute) Descriptor() ([]byte, []int) {
-	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{17}
+	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *BgpRedistribute) GetAsn() uint32 {
@@ -1621,7 +1672,7 @@ type BgpType5 struct {
 
 func (x *BgpType5) Reset() {
 	*x = BgpType5{}
-	mi := &file_api_agent_v1_agent_proto_msgTypes[18]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1633,7 +1684,7 @@ func (x *BgpType5) String() string {
 func (*BgpType5) ProtoMessage() {}
 
 func (x *BgpType5) ProtoReflect() protoreflect.Message {
-	mi := &file_api_agent_v1_agent_proto_msgTypes[18]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1646,7 +1697,7 @@ func (x *BgpType5) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BgpType5.ProtoReflect.Descriptor instead.
 func (*BgpType5) Descriptor() ([]byte, []int) {
-	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{18}
+	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *BgpType5) GetAsn() uint32 {
@@ -1688,7 +1739,7 @@ type EvpnGlobal struct {
 
 func (x *EvpnGlobal) Reset() {
 	*x = EvpnGlobal{}
-	mi := &file_api_agent_v1_agent_proto_msgTypes[19]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1700,7 +1751,7 @@ func (x *EvpnGlobal) String() string {
 func (*EvpnGlobal) ProtoMessage() {}
 
 func (x *EvpnGlobal) ProtoReflect() protoreflect.Message {
-	mi := &file_api_agent_v1_agent_proto_msgTypes[19]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1713,7 +1764,7 @@ func (x *EvpnGlobal) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EvpnGlobal.ProtoReflect.Descriptor instead.
 func (*EvpnGlobal) Descriptor() ([]byte, []int) {
-	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{19}
+	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *EvpnGlobal) GetAsn() uint32 {
@@ -1751,7 +1802,7 @@ type Evpn struct {
 
 func (x *Evpn) Reset() {
 	*x = Evpn{}
-	mi := &file_api_agent_v1_agent_proto_msgTypes[20]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1763,7 +1814,7 @@ func (x *Evpn) String() string {
 func (*Evpn) ProtoMessage() {}
 
 func (x *Evpn) ProtoReflect() protoreflect.Message {
-	mi := &file_api_agent_v1_agent_proto_msgTypes[20]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1776,7 +1827,7 @@ func (x *Evpn) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Evpn.ProtoReflect.Descriptor instead.
 func (*Evpn) Descriptor() ([]byte, []int) {
-	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{20}
+	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *Evpn) GetAsn() uint32 {
@@ -1831,7 +1882,7 @@ type L3Vni struct {
 
 func (x *L3Vni) Reset() {
 	*x = L3Vni{}
-	mi := &file_api_agent_v1_agent_proto_msgTypes[21]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1843,7 +1894,7 @@ func (x *L3Vni) String() string {
 func (*L3Vni) ProtoMessage() {}
 
 func (x *L3Vni) ProtoReflect() protoreflect.Message {
-	mi := &file_api_agent_v1_agent_proto_msgTypes[21]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1856,7 +1907,7 @@ func (x *L3Vni) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use L3Vni.ProtoReflect.Descriptor instead.
 func (*L3Vni) Descriptor() ([]byte, []int) {
-	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{21}
+	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *L3Vni) GetTenant() string {
@@ -1890,6 +1941,7 @@ type Operation struct {
 	//	*Operation_Binding
 	//	*Operation_Vxlan
 	//	*Operation_Route
+	//	*Operation_NeighborKeepalive
 	//	*Operation_Ospf
 	//	*Operation_OspfNetwork
 	//	*Operation_OspfInterface
@@ -1909,7 +1961,7 @@ type Operation struct {
 
 func (x *Operation) Reset() {
 	*x = Operation{}
-	mi := &file_api_agent_v1_agent_proto_msgTypes[22]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1921,7 +1973,7 @@ func (x *Operation) String() string {
 func (*Operation) ProtoMessage() {}
 
 func (x *Operation) ProtoReflect() protoreflect.Message {
-	mi := &file_api_agent_v1_agent_proto_msgTypes[22]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1934,7 +1986,7 @@ func (x *Operation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Operation.ProtoReflect.Descriptor instead.
 func (*Operation) Descriptor() ([]byte, []int) {
-	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{22}
+	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *Operation) GetId() string {
@@ -2048,6 +2100,15 @@ func (x *Operation) GetRoute() *Route {
 	if x != nil {
 		if x, ok := x.Data.(*Operation_Route); ok {
 			return x.Route
+		}
+	}
+	return nil
+}
+
+func (x *Operation) GetNeighborKeepalive() *NeighborKeepalive {
+	if x != nil {
+		if x, ok := x.Data.(*Operation_NeighborKeepalive); ok {
+			return x.NeighborKeepalive
 		}
 	}
 	return nil
@@ -2201,6 +2262,10 @@ type Operation_Route struct {
 	Route *Route `protobuf:"bytes,18,opt,name=route,proto3,oneof"`
 }
 
+type Operation_NeighborKeepalive struct {
+	NeighborKeepalive *NeighborKeepalive `protobuf:"bytes,19,opt,name=neighbor_keepalive,json=neighborKeepalive,proto3,oneof"`
+}
+
 type Operation_Ospf struct {
 	Ospf *Ospf `protobuf:"bytes,20,opt,name=ospf,proto3,oneof"`
 }
@@ -2267,6 +2332,8 @@ func (*Operation_Vxlan) isOperation_Data() {}
 
 func (*Operation_Route) isOperation_Data() {}
 
+func (*Operation_NeighborKeepalive) isOperation_Data() {}
+
 func (*Operation_Ospf) isOperation_Data() {}
 
 func (*Operation_OspfNetwork) isOperation_Data() {}
@@ -2300,7 +2367,7 @@ type NodeRequest struct {
 
 func (x *NodeRequest) Reset() {
 	*x = NodeRequest{}
-	mi := &file_api_agent_v1_agent_proto_msgTypes[23]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2312,7 +2379,7 @@ func (x *NodeRequest) String() string {
 func (*NodeRequest) ProtoMessage() {}
 
 func (x *NodeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_agent_v1_agent_proto_msgTypes[23]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2325,7 +2392,7 @@ func (x *NodeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NodeRequest.ProtoReflect.Descriptor instead.
 func (*NodeRequest) Descriptor() ([]byte, []int) {
-	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{23}
+	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *NodeRequest) GetNodeId() string {
@@ -2346,7 +2413,7 @@ type BeginRequest struct {
 
 func (x *BeginRequest) Reset() {
 	*x = BeginRequest{}
-	mi := &file_api_agent_v1_agent_proto_msgTypes[24]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2358,7 +2425,7 @@ func (x *BeginRequest) String() string {
 func (*BeginRequest) ProtoMessage() {}
 
 func (x *BeginRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_agent_v1_agent_proto_msgTypes[24]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2371,7 +2438,7 @@ func (x *BeginRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BeginRequest.ProtoReflect.Descriptor instead.
 func (*BeginRequest) Descriptor() ([]byte, []int) {
-	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{24}
+	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *BeginRequest) GetNodeId() string {
@@ -2409,7 +2476,7 @@ type Transaction struct {
 
 func (x *Transaction) Reset() {
 	*x = Transaction{}
-	mi := &file_api_agent_v1_agent_proto_msgTypes[25]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2421,7 +2488,7 @@ func (x *Transaction) String() string {
 func (*Transaction) ProtoMessage() {}
 
 func (x *Transaction) ProtoReflect() protoreflect.Message {
-	mi := &file_api_agent_v1_agent_proto_msgTypes[25]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2434,7 +2501,7 @@ func (x *Transaction) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Transaction.ProtoReflect.Descriptor instead.
 func (*Transaction) Descriptor() ([]byte, []int) {
-	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{25}
+	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *Transaction) GetId() string {
@@ -2490,7 +2557,7 @@ type StageRequest struct {
 
 func (x *StageRequest) Reset() {
 	*x = StageRequest{}
-	mi := &file_api_agent_v1_agent_proto_msgTypes[26]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2502,7 +2569,7 @@ func (x *StageRequest) String() string {
 func (*StageRequest) ProtoMessage() {}
 
 func (x *StageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_agent_v1_agent_proto_msgTypes[26]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2515,7 +2582,7 @@ func (x *StageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StageRequest.ProtoReflect.Descriptor instead.
 func (*StageRequest) Descriptor() ([]byte, []int) {
-	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{26}
+	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *StageRequest) GetNodeId() string {
@@ -2550,7 +2617,7 @@ type CommitRequest struct {
 
 func (x *CommitRequest) Reset() {
 	*x = CommitRequest{}
-	mi := &file_api_agent_v1_agent_proto_msgTypes[27]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2562,7 +2629,7 @@ func (x *CommitRequest) String() string {
 func (*CommitRequest) ProtoMessage() {}
 
 func (x *CommitRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_agent_v1_agent_proto_msgTypes[27]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2575,7 +2642,7 @@ func (x *CommitRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CommitRequest.ProtoReflect.Descriptor instead.
 func (*CommitRequest) Descriptor() ([]byte, []int) {
-	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{27}
+	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *CommitRequest) GetNodeId() string {
@@ -2610,7 +2677,7 @@ type TaskRequest struct {
 
 func (x *TaskRequest) Reset() {
 	*x = TaskRequest{}
-	mi := &file_api_agent_v1_agent_proto_msgTypes[28]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2622,7 +2689,7 @@ func (x *TaskRequest) String() string {
 func (*TaskRequest) ProtoMessage() {}
 
 func (x *TaskRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_agent_v1_agent_proto_msgTypes[28]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2635,7 +2702,7 @@ func (x *TaskRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TaskRequest.ProtoReflect.Descriptor instead.
 func (*TaskRequest) Descriptor() ([]byte, []int) {
-	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{28}
+	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *TaskRequest) GetNodeId() string {
@@ -2669,7 +2736,7 @@ type AbortRequest struct {
 
 func (x *AbortRequest) Reset() {
 	*x = AbortRequest{}
-	mi := &file_api_agent_v1_agent_proto_msgTypes[29]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2681,7 +2748,7 @@ func (x *AbortRequest) String() string {
 func (*AbortRequest) ProtoMessage() {}
 
 func (x *AbortRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_agent_v1_agent_proto_msgTypes[29]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2694,7 +2761,7 @@ func (x *AbortRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AbortRequest.ProtoReflect.Descriptor instead.
 func (*AbortRequest) Descriptor() ([]byte, []int) {
-	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{29}
+	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *AbortRequest) GetNodeId() string {
@@ -2725,7 +2792,7 @@ type RetryRollbackRequest struct {
 
 func (x *RetryRollbackRequest) Reset() {
 	*x = RetryRollbackRequest{}
-	mi := &file_api_agent_v1_agent_proto_msgTypes[30]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2737,7 +2804,7 @@ func (x *RetryRollbackRequest) String() string {
 func (*RetryRollbackRequest) ProtoMessage() {}
 
 func (x *RetryRollbackRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_agent_v1_agent_proto_msgTypes[30]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2750,7 +2817,7 @@ func (x *RetryRollbackRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RetryRollbackRequest.ProtoReflect.Descriptor instead.
 func (*RetryRollbackRequest) Descriptor() ([]byte, []int) {
-	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{30}
+	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *RetryRollbackRequest) GetNodeId() string {
@@ -2796,7 +2863,7 @@ type Empty struct {
 
 func (x *Empty) Reset() {
 	*x = Empty{}
-	mi := &file_api_agent_v1_agent_proto_msgTypes[31]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2808,7 +2875,7 @@ func (x *Empty) String() string {
 func (*Empty) ProtoMessage() {}
 
 func (x *Empty) ProtoReflect() protoreflect.Message {
-	mi := &file_api_agent_v1_agent_proto_msgTypes[31]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2821,7 +2888,7 @@ func (x *Empty) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Empty.ProtoReflect.Descriptor instead.
 func (*Empty) Descriptor() ([]byte, []int) {
-	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{31}
+	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{32}
 }
 
 type StepResult struct {
@@ -2838,7 +2905,7 @@ type StepResult struct {
 
 func (x *StepResult) Reset() {
 	*x = StepResult{}
-	mi := &file_api_agent_v1_agent_proto_msgTypes[32]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2850,7 +2917,7 @@ func (x *StepResult) String() string {
 func (*StepResult) ProtoMessage() {}
 
 func (x *StepResult) ProtoReflect() protoreflect.Message {
-	mi := &file_api_agent_v1_agent_proto_msgTypes[32]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2863,7 +2930,7 @@ func (x *StepResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StepResult.ProtoReflect.Descriptor instead.
 func (*StepResult) Descriptor() ([]byte, []int) {
-	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{32}
+	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *StepResult) GetId() string {
@@ -2925,7 +2992,7 @@ type Task struct {
 
 func (x *Task) Reset() {
 	*x = Task{}
-	mi := &file_api_agent_v1_agent_proto_msgTypes[33]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2937,7 +3004,7 @@ func (x *Task) String() string {
 func (*Task) ProtoMessage() {}
 
 func (x *Task) ProtoReflect() protoreflect.Message {
-	mi := &file_api_agent_v1_agent_proto_msgTypes[33]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2950,7 +3017,7 @@ func (x *Task) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Task.ProtoReflect.Descriptor instead.
 func (*Task) Descriptor() ([]byte, []int) {
-	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{33}
+	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *Task) GetId() string {
@@ -3027,7 +3094,7 @@ type Capability struct {
 
 func (x *Capability) Reset() {
 	*x = Capability{}
-	mi := &file_api_agent_v1_agent_proto_msgTypes[34]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3039,7 +3106,7 @@ func (x *Capability) String() string {
 func (*Capability) ProtoMessage() {}
 
 func (x *Capability) ProtoReflect() protoreflect.Message {
-	mi := &file_api_agent_v1_agent_proto_msgTypes[34]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3052,7 +3119,7 @@ func (x *Capability) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Capability.ProtoReflect.Descriptor instead.
 func (*Capability) Descriptor() ([]byte, []int) {
-	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{34}
+	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *Capability) GetCode() OpCode {
@@ -3089,7 +3156,7 @@ type Capabilities struct {
 
 func (x *Capabilities) Reset() {
 	*x = Capabilities{}
-	mi := &file_api_agent_v1_agent_proto_msgTypes[35]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3101,7 +3168,7 @@ func (x *Capabilities) String() string {
 func (*Capabilities) ProtoMessage() {}
 
 func (x *Capabilities) ProtoReflect() protoreflect.Message {
-	mi := &file_api_agent_v1_agent_proto_msgTypes[35]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3114,7 +3181,7 @@ func (x *Capabilities) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Capabilities.ProtoReflect.Descriptor instead.
 func (*Capabilities) Descriptor() ([]byte, []int) {
-	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{35}
+	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *Capabilities) GetNodeId() string {
@@ -3167,7 +3234,7 @@ type State struct {
 
 func (x *State) Reset() {
 	*x = State{}
-	mi := &file_api_agent_v1_agent_proto_msgTypes[36]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3179,7 +3246,7 @@ func (x *State) String() string {
 func (*State) ProtoMessage() {}
 
 func (x *State) ProtoReflect() protoreflect.Message {
-	mi := &file_api_agent_v1_agent_proto_msgTypes[36]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3192,7 +3259,7 @@ func (x *State) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use State.ProtoReflect.Descriptor instead.
 func (*State) Descriptor() ([]byte, []int) {
-	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{36}
+	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *State) GetNodeId() string {
@@ -3255,7 +3322,7 @@ type QueryCapability struct {
 
 func (x *QueryCapability) Reset() {
 	*x = QueryCapability{}
-	mi := &file_api_agent_v1_agent_proto_msgTypes[37]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3267,7 +3334,7 @@ func (x *QueryCapability) String() string {
 func (*QueryCapability) ProtoMessage() {}
 
 func (x *QueryCapability) ProtoReflect() protoreflect.Message {
-	mi := &file_api_agent_v1_agent_proto_msgTypes[37]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3280,7 +3347,7 @@ func (x *QueryCapability) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QueryCapability.ProtoReflect.Descriptor instead.
 func (*QueryCapability) Descriptor() ([]byte, []int) {
-	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{37}
+	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *QueryCapability) GetKind() QueryKind {
@@ -3324,7 +3391,7 @@ type QueryRequest struct {
 
 func (x *QueryRequest) Reset() {
 	*x = QueryRequest{}
-	mi := &file_api_agent_v1_agent_proto_msgTypes[38]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3336,7 +3403,7 @@ func (x *QueryRequest) String() string {
 func (*QueryRequest) ProtoMessage() {}
 
 func (x *QueryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_agent_v1_agent_proto_msgTypes[38]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3349,7 +3416,7 @@ func (x *QueryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QueryRequest.ProtoReflect.Descriptor instead.
 func (*QueryRequest) Descriptor() ([]byte, []int) {
-	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{38}
+	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *QueryRequest) GetNodeId() string {
@@ -3456,7 +3523,7 @@ type QueryResponse struct {
 
 func (x *QueryResponse) Reset() {
 	*x = QueryResponse{}
-	mi := &file_api_agent_v1_agent_proto_msgTypes[39]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3468,7 +3535,7 @@ func (x *QueryResponse) String() string {
 func (*QueryResponse) ProtoMessage() {}
 
 func (x *QueryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_agent_v1_agent_proto_msgTypes[39]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3481,7 +3548,7 @@ func (x *QueryResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QueryResponse.ProtoReflect.Descriptor instead.
 func (*QueryResponse) Descriptor() ([]byte, []int) {
-	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{39}
+	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *QueryResponse) GetNodeId() string {
@@ -3565,7 +3632,7 @@ type VerifyResourcesRequest struct {
 
 func (x *VerifyResourcesRequest) Reset() {
 	*x = VerifyResourcesRequest{}
-	mi := &file_api_agent_v1_agent_proto_msgTypes[40]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3577,7 +3644,7 @@ func (x *VerifyResourcesRequest) String() string {
 func (*VerifyResourcesRequest) ProtoMessage() {}
 
 func (x *VerifyResourcesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_agent_v1_agent_proto_msgTypes[40]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3590,7 +3657,7 @@ func (x *VerifyResourcesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VerifyResourcesRequest.ProtoReflect.Descriptor instead.
 func (*VerifyResourcesRequest) Descriptor() ([]byte, []int) {
-	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{40}
+	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *VerifyResourcesRequest) GetNodeId() string {
@@ -3626,7 +3693,7 @@ type VerifyResourcesResponse struct {
 
 func (x *VerifyResourcesResponse) Reset() {
 	*x = VerifyResourcesResponse{}
-	mi := &file_api_agent_v1_agent_proto_msgTypes[41]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3638,7 +3705,7 @@ func (x *VerifyResourcesResponse) String() string {
 func (*VerifyResourcesResponse) ProtoMessage() {}
 
 func (x *VerifyResourcesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_agent_v1_agent_proto_msgTypes[41]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3651,7 +3718,7 @@ func (x *VerifyResourcesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VerifyResourcesResponse.ProtoReflect.Descriptor instead.
 func (*VerifyResourcesResponse) Descriptor() ([]byte, []int) {
-	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{41}
+	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *VerifyResourcesResponse) GetNodeId() string {
@@ -3695,7 +3762,7 @@ type Registration struct {
 
 func (x *Registration) Reset() {
 	*x = Registration{}
-	mi := &file_api_agent_v1_agent_proto_msgTypes[42]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3707,7 +3774,7 @@ func (x *Registration) String() string {
 func (*Registration) ProtoMessage() {}
 
 func (x *Registration) ProtoReflect() protoreflect.Message {
-	mi := &file_api_agent_v1_agent_proto_msgTypes[42]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3720,7 +3787,7 @@ func (x *Registration) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Registration.ProtoReflect.Descriptor instead.
 func (*Registration) Descriptor() ([]byte, []int) {
-	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{42}
+	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *Registration) GetProposedNodeId() string {
@@ -3767,7 +3834,7 @@ type Registered struct {
 
 func (x *Registered) Reset() {
 	*x = Registered{}
-	mi := &file_api_agent_v1_agent_proto_msgTypes[43]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3779,7 +3846,7 @@ func (x *Registered) String() string {
 func (*Registered) ProtoMessage() {}
 
 func (x *Registered) ProtoReflect() protoreflect.Message {
-	mi := &file_api_agent_v1_agent_proto_msgTypes[43]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3792,7 +3859,7 @@ func (x *Registered) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Registered.ProtoReflect.Descriptor instead.
 func (*Registered) Descriptor() ([]byte, []int) {
-	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{43}
+	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *Registered) GetNodeId() string {
@@ -3814,7 +3881,7 @@ type Heartbeat struct {
 
 func (x *Heartbeat) Reset() {
 	*x = Heartbeat{}
-	mi := &file_api_agent_v1_agent_proto_msgTypes[44]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3826,7 +3893,7 @@ func (x *Heartbeat) String() string {
 func (*Heartbeat) ProtoMessage() {}
 
 func (x *Heartbeat) ProtoReflect() protoreflect.Message {
-	mi := &file_api_agent_v1_agent_proto_msgTypes[44]
+	mi := &file_api_agent_v1_agent_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3839,7 +3906,7 @@ func (x *Heartbeat) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Heartbeat.ProtoReflect.Descriptor instead.
 func (*Heartbeat) Descriptor() ([]byte, []int) {
-	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{44}
+	return file_api_agent_v1_agent_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *Heartbeat) GetNodeId() string {
@@ -3880,7 +3947,11 @@ const file_api_agent_v1_agent_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\tR\x05value\x12\x1a\n" +
 	"\boptional\x18\x03 \x01(\bR\boptional\";\n" +
 	"\aNetwork\x120\n" +
-	"\bsettings\x18\x01 \x03(\v2\x14.sdn.agent.v1.SysctlR\bsettings\"\xb0\x01\n" +
+	"\bsettings\x18\x01 \x03(\v2\x14.sdn.agent.v1.SysctlR\bsettings\">\n" +
+	"\x11NeighborKeepalive\x12\x1d\n" +
+	"\aenabled\x18\x01 \x01(\bH\x00R\aenabled\x88\x01\x01B\n" +
+	"\n" +
+	"\b_enabled\"\xb0\x01\n" +
 	"\tInterface\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x15\n" +
 	"\x03mtu\x18\x02 \x01(\rH\x00R\x03mtu\x88\x01\x01\x12\x15\n" +
@@ -4022,7 +4093,7 @@ const file_api_agent_v1_agent_proto_rawDesc = "" +
 	"export_rts\x18\x06 \x03(\tR\texportRts\"1\n" +
 	"\x05L3Vni\x12\x16\n" +
 	"\x06tenant\x18\x01 \x01(\tR\x06tenant\x12\x10\n" +
-	"\x03vni\x18\x02 \x01(\rR\x03vni\"\x81\n" +
+	"\x03vni\x18\x02 \x01(\rR\x03vni\"\xd3\n" +
 	"\n" +
 	"\tOperation\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12(\n" +
@@ -4040,7 +4111,8 @@ const file_api_agent_v1_agent_proto_rawDesc = "" +
 	"bridgePort\x121\n" +
 	"\abinding\x18\x10 \x01(\v2\x15.sdn.agent.v1.BindingH\x00R\abinding\x12+\n" +
 	"\x05vxlan\x18\x11 \x01(\v2\x13.sdn.agent.v1.VxlanH\x00R\x05vxlan\x12+\n" +
-	"\x05route\x18\x12 \x01(\v2\x13.sdn.agent.v1.RouteH\x00R\x05route\x12(\n" +
+	"\x05route\x18\x12 \x01(\v2\x13.sdn.agent.v1.RouteH\x00R\x05route\x12P\n" +
+	"\x12neighbor_keepalive\x18\x13 \x01(\v2\x1f.sdn.agent.v1.NeighborKeepaliveH\x00R\x11neighborKeepalive\x12(\n" +
 	"\x04ospf\x18\x14 \x01(\v2\x12.sdn.agent.v1.OspfH\x00R\x04ospf\x12>\n" +
 	"\fospf_network\x18\x15 \x01(\v2\x19.sdn.agent.v1.OspfNetworkH\x00R\vospfNetwork\x12D\n" +
 	"\x0eospf_interface\x18\x16 \x01(\v2\x1b.sdn.agent.v1.OspfInterfaceH\x00R\rospfInterface\x12G\n" +
@@ -4212,7 +4284,7 @@ const file_api_agent_v1_agent_proto_rawDesc = "" +
 	"\x06DELETE\x10\x03\x12\b\n" +
 	"\x04BIND\x10\x04\x12\n" +
 	"\n" +
-	"\x06UNBIND\x10\x05*\xd4\x03\n" +
+	"\x06UNBIND\x10\x05*\xec\x03\n" +
 	"\x06OpCode\x12\x12\n" +
 	"\x0eOP_UNSPECIFIED\x10\x00\x12\x10\n" +
 	"\fNODE_NETWORK\x10\x01\x12\r\n" +
@@ -4224,7 +4296,9 @@ const file_api_agent_v1_agent_proto_rawDesc = "" +
 	"\aBD_PORT\x10\x06\x12\r\n" +
 	"\tBD_TENANT\x10\a\x12\t\n" +
 	"\x05VXLAN\x10\b\x12\x10\n" +
-	"\fSTATIC_ROUTE\x10\t\x12\x11\n" +
+	"\fSTATIC_ROUTE\x10\t\x12\x16\n" +
+	"\x12NEIGHBOR_KEEPALIVE\x10\n" +
+	"\x12\x11\n" +
 	"\rOSPF_INSTANCE\x10\x14\x12\x10\n" +
 	"\fOSPF_NETWORK\x10\x15\x12\x12\n" +
 	"\x0eOSPF_INTERFACE\x10\x16\x12\x12\n" +
@@ -4249,7 +4323,7 @@ const file_api_agent_v1_agent_proto_rawDesc = "" +
 	"\x04IPV4\x10\x01\x12\b\n" +
 	"\x04IPV6\x10\x02\x12\x0e\n" +
 	"\n" +
-	"L2VPN_EVPN\x10\x03*\xcf\x02\n" +
+	"L2VPN_EVPN\x10\x03*\xee\x02\n" +
 	"\tQueryKind\x12\x15\n" +
 	"\x11QUERY_UNSPECIFIED\x10\x00\x12\v\n" +
 	"\aTENANTS\x10\x01\x12\v\n" +
@@ -4274,7 +4348,8 @@ const file_api_agent_v1_agent_proto_rawDesc = "" +
 	"\x0eOSPF_NEIGHBORS\x10\x10\x12\x11\n" +
 	"\rOSPF_DATABASE\x10\x11\x12\x0f\n" +
 	"\vOSPF_ROUTES\x10\x12\x12\t\n" +
-	"\x05PORTS\x10\x132\xe6\x05\n" +
+	"\x05PORTS\x10\x13\x12\x1d\n" +
+	"\x19NEIGHBOR_KEEPALIVE_STATUS\x10\x142\xe6\x05\n" +
 	"\x05Agent\x12>\n" +
 	"\x05Begin\x12\x1a.sdn.agent.v1.BeginRequest\x1a\x19.sdn.agent.v1.Transaction\x12>\n" +
 	"\x05Stage\x12\x1a.sdn.agent.v1.StageRequest\x1a\x19.sdn.agent.v1.Transaction\x129\n" +
@@ -4306,7 +4381,7 @@ func file_api_agent_v1_agent_proto_rawDescGZIP() []byte {
 }
 
 var file_api_agent_v1_agent_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_api_agent_v1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 46)
+var file_api_agent_v1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 47)
 var file_api_agent_v1_agent_proto_goTypes = []any{
 	(Action)(0),                     // 0: sdn.agent.v1.Action
 	(OpCode)(0),                     // 1: sdn.agent.v1.OpCode
@@ -4314,51 +4389,52 @@ var file_api_agent_v1_agent_proto_goTypes = []any{
 	(QueryKind)(0),                  // 3: sdn.agent.v1.QueryKind
 	(*Sysctl)(nil),                  // 4: sdn.agent.v1.Sysctl
 	(*Network)(nil),                 // 5: sdn.agent.v1.Network
-	(*Interface)(nil),               // 6: sdn.agent.v1.Interface
-	(*Address)(nil),                 // 7: sdn.agent.v1.Address
-	(*Tenant)(nil),                  // 8: sdn.agent.v1.Tenant
-	(*Bridge)(nil),                  // 9: sdn.agent.v1.Bridge
-	(*BridgePort)(nil),              // 10: sdn.agent.v1.BridgePort
-	(*Binding)(nil),                 // 11: sdn.agent.v1.Binding
-	(*Vxlan)(nil),                   // 12: sdn.agent.v1.Vxlan
-	(*Route)(nil),                   // 13: sdn.agent.v1.Route
-	(*Ospf)(nil),                    // 14: sdn.agent.v1.Ospf
-	(*OspfNetwork)(nil),             // 15: sdn.agent.v1.OspfNetwork
-	(*OspfInterface)(nil),           // 16: sdn.agent.v1.OspfInterface
-	(*Ospf6Interface)(nil),          // 17: sdn.agent.v1.Ospf6Interface
-	(*Bgp)(nil),                     // 18: sdn.agent.v1.Bgp
-	(*Peer)(nil),                    // 19: sdn.agent.v1.Peer
-	(*BgpNetwork)(nil),              // 20: sdn.agent.v1.BgpNetwork
-	(*BgpRedistribute)(nil),         // 21: sdn.agent.v1.BgpRedistribute
-	(*BgpType5)(nil),                // 22: sdn.agent.v1.BgpType5
-	(*EvpnGlobal)(nil),              // 23: sdn.agent.v1.EvpnGlobal
-	(*Evpn)(nil),                    // 24: sdn.agent.v1.Evpn
-	(*L3Vni)(nil),                   // 25: sdn.agent.v1.L3Vni
-	(*Operation)(nil),               // 26: sdn.agent.v1.Operation
-	(*NodeRequest)(nil),             // 27: sdn.agent.v1.NodeRequest
-	(*BeginRequest)(nil),            // 28: sdn.agent.v1.BeginRequest
-	(*Transaction)(nil),             // 29: sdn.agent.v1.Transaction
-	(*StageRequest)(nil),            // 30: sdn.agent.v1.StageRequest
-	(*CommitRequest)(nil),           // 31: sdn.agent.v1.CommitRequest
-	(*TaskRequest)(nil),             // 32: sdn.agent.v1.TaskRequest
-	(*AbortRequest)(nil),            // 33: sdn.agent.v1.AbortRequest
-	(*RetryRollbackRequest)(nil),    // 34: sdn.agent.v1.RetryRollbackRequest
-	(*Empty)(nil),                   // 35: sdn.agent.v1.Empty
-	(*StepResult)(nil),              // 36: sdn.agent.v1.StepResult
-	(*Task)(nil),                    // 37: sdn.agent.v1.Task
-	(*Capability)(nil),              // 38: sdn.agent.v1.Capability
-	(*Capabilities)(nil),            // 39: sdn.agent.v1.Capabilities
-	(*State)(nil),                   // 40: sdn.agent.v1.State
-	(*QueryCapability)(nil),         // 41: sdn.agent.v1.QueryCapability
-	(*QueryRequest)(nil),            // 42: sdn.agent.v1.QueryRequest
-	(*QueryResponse)(nil),           // 43: sdn.agent.v1.QueryResponse
-	(*VerifyResourcesRequest)(nil),  // 44: sdn.agent.v1.VerifyResourcesRequest
-	(*VerifyResourcesResponse)(nil), // 45: sdn.agent.v1.VerifyResourcesResponse
-	(*Registration)(nil),            // 46: sdn.agent.v1.Registration
-	(*Registered)(nil),              // 47: sdn.agent.v1.Registered
-	(*Heartbeat)(nil),               // 48: sdn.agent.v1.Heartbeat
-	nil,                             // 49: sdn.agent.v1.State.ObservationsEntry
-	(*structpb.Struct)(nil),         // 50: google.protobuf.Struct
+	(*NeighborKeepalive)(nil),       // 6: sdn.agent.v1.NeighborKeepalive
+	(*Interface)(nil),               // 7: sdn.agent.v1.Interface
+	(*Address)(nil),                 // 8: sdn.agent.v1.Address
+	(*Tenant)(nil),                  // 9: sdn.agent.v1.Tenant
+	(*Bridge)(nil),                  // 10: sdn.agent.v1.Bridge
+	(*BridgePort)(nil),              // 11: sdn.agent.v1.BridgePort
+	(*Binding)(nil),                 // 12: sdn.agent.v1.Binding
+	(*Vxlan)(nil),                   // 13: sdn.agent.v1.Vxlan
+	(*Route)(nil),                   // 14: sdn.agent.v1.Route
+	(*Ospf)(nil),                    // 15: sdn.agent.v1.Ospf
+	(*OspfNetwork)(nil),             // 16: sdn.agent.v1.OspfNetwork
+	(*OspfInterface)(nil),           // 17: sdn.agent.v1.OspfInterface
+	(*Ospf6Interface)(nil),          // 18: sdn.agent.v1.Ospf6Interface
+	(*Bgp)(nil),                     // 19: sdn.agent.v1.Bgp
+	(*Peer)(nil),                    // 20: sdn.agent.v1.Peer
+	(*BgpNetwork)(nil),              // 21: sdn.agent.v1.BgpNetwork
+	(*BgpRedistribute)(nil),         // 22: sdn.agent.v1.BgpRedistribute
+	(*BgpType5)(nil),                // 23: sdn.agent.v1.BgpType5
+	(*EvpnGlobal)(nil),              // 24: sdn.agent.v1.EvpnGlobal
+	(*Evpn)(nil),                    // 25: sdn.agent.v1.Evpn
+	(*L3Vni)(nil),                   // 26: sdn.agent.v1.L3Vni
+	(*Operation)(nil),               // 27: sdn.agent.v1.Operation
+	(*NodeRequest)(nil),             // 28: sdn.agent.v1.NodeRequest
+	(*BeginRequest)(nil),            // 29: sdn.agent.v1.BeginRequest
+	(*Transaction)(nil),             // 30: sdn.agent.v1.Transaction
+	(*StageRequest)(nil),            // 31: sdn.agent.v1.StageRequest
+	(*CommitRequest)(nil),           // 32: sdn.agent.v1.CommitRequest
+	(*TaskRequest)(nil),             // 33: sdn.agent.v1.TaskRequest
+	(*AbortRequest)(nil),            // 34: sdn.agent.v1.AbortRequest
+	(*RetryRollbackRequest)(nil),    // 35: sdn.agent.v1.RetryRollbackRequest
+	(*Empty)(nil),                   // 36: sdn.agent.v1.Empty
+	(*StepResult)(nil),              // 37: sdn.agent.v1.StepResult
+	(*Task)(nil),                    // 38: sdn.agent.v1.Task
+	(*Capability)(nil),              // 39: sdn.agent.v1.Capability
+	(*Capabilities)(nil),            // 40: sdn.agent.v1.Capabilities
+	(*State)(nil),                   // 41: sdn.agent.v1.State
+	(*QueryCapability)(nil),         // 42: sdn.agent.v1.QueryCapability
+	(*QueryRequest)(nil),            // 43: sdn.agent.v1.QueryRequest
+	(*QueryResponse)(nil),           // 44: sdn.agent.v1.QueryResponse
+	(*VerifyResourcesRequest)(nil),  // 45: sdn.agent.v1.VerifyResourcesRequest
+	(*VerifyResourcesResponse)(nil), // 46: sdn.agent.v1.VerifyResourcesResponse
+	(*Registration)(nil),            // 47: sdn.agent.v1.Registration
+	(*Registered)(nil),              // 48: sdn.agent.v1.Registered
+	(*Heartbeat)(nil),               // 49: sdn.agent.v1.Heartbeat
+	nil,                             // 50: sdn.agent.v1.State.ObservationsEntry
+	(*structpb.Struct)(nil),         // 51: google.protobuf.Struct
 }
 var file_api_agent_v1_agent_proto_depIdxs = []int32{
 	4,  // 0: sdn.agent.v1.Network.settings:type_name -> sdn.agent.v1.Sysctl
@@ -4369,72 +4445,73 @@ var file_api_agent_v1_agent_proto_depIdxs = []int32{
 	1,  // 5: sdn.agent.v1.Operation.code:type_name -> sdn.agent.v1.OpCode
 	0,  // 6: sdn.agent.v1.Operation.action:type_name -> sdn.agent.v1.Action
 	5,  // 7: sdn.agent.v1.Operation.network:type_name -> sdn.agent.v1.Network
-	6,  // 8: sdn.agent.v1.Operation.interface:type_name -> sdn.agent.v1.Interface
-	7,  // 9: sdn.agent.v1.Operation.address:type_name -> sdn.agent.v1.Address
-	8,  // 10: sdn.agent.v1.Operation.tenant:type_name -> sdn.agent.v1.Tenant
-	9,  // 11: sdn.agent.v1.Operation.bridge:type_name -> sdn.agent.v1.Bridge
-	10, // 12: sdn.agent.v1.Operation.bridge_port:type_name -> sdn.agent.v1.BridgePort
-	11, // 13: sdn.agent.v1.Operation.binding:type_name -> sdn.agent.v1.Binding
-	12, // 14: sdn.agent.v1.Operation.vxlan:type_name -> sdn.agent.v1.Vxlan
-	13, // 15: sdn.agent.v1.Operation.route:type_name -> sdn.agent.v1.Route
-	14, // 16: sdn.agent.v1.Operation.ospf:type_name -> sdn.agent.v1.Ospf
-	15, // 17: sdn.agent.v1.Operation.ospf_network:type_name -> sdn.agent.v1.OspfNetwork
-	16, // 18: sdn.agent.v1.Operation.ospf_interface:type_name -> sdn.agent.v1.OspfInterface
-	17, // 19: sdn.agent.v1.Operation.ospf6_interface:type_name -> sdn.agent.v1.Ospf6Interface
-	18, // 20: sdn.agent.v1.Operation.bgp:type_name -> sdn.agent.v1.Bgp
-	19, // 21: sdn.agent.v1.Operation.peer:type_name -> sdn.agent.v1.Peer
-	23, // 22: sdn.agent.v1.Operation.evpn_global:type_name -> sdn.agent.v1.EvpnGlobal
-	24, // 23: sdn.agent.v1.Operation.evpn:type_name -> sdn.agent.v1.Evpn
-	25, // 24: sdn.agent.v1.Operation.l3vni:type_name -> sdn.agent.v1.L3Vni
-	20, // 25: sdn.agent.v1.Operation.bgp_network:type_name -> sdn.agent.v1.BgpNetwork
-	21, // 26: sdn.agent.v1.Operation.bgp_redistribute:type_name -> sdn.agent.v1.BgpRedistribute
-	22, // 27: sdn.agent.v1.Operation.bgp_type5:type_name -> sdn.agent.v1.BgpType5
-	26, // 28: sdn.agent.v1.Transaction.operations:type_name -> sdn.agent.v1.Operation
-	26, // 29: sdn.agent.v1.StageRequest.operations:type_name -> sdn.agent.v1.Operation
-	36, // 30: sdn.agent.v1.Task.steps:type_name -> sdn.agent.v1.StepResult
-	1,  // 31: sdn.agent.v1.Capability.code:type_name -> sdn.agent.v1.OpCode
-	38, // 32: sdn.agent.v1.Capabilities.operations:type_name -> sdn.agent.v1.Capability
-	41, // 33: sdn.agent.v1.Capabilities.queries:type_name -> sdn.agent.v1.QueryCapability
-	49, // 34: sdn.agent.v1.State.observations:type_name -> sdn.agent.v1.State.ObservationsEntry
-	3,  // 35: sdn.agent.v1.QueryCapability.kind:type_name -> sdn.agent.v1.QueryKind
-	2,  // 36: sdn.agent.v1.QueryCapability.families:type_name -> sdn.agent.v1.AddressFamily
-	3,  // 37: sdn.agent.v1.QueryRequest.kind:type_name -> sdn.agent.v1.QueryKind
-	2,  // 38: sdn.agent.v1.QueryRequest.family:type_name -> sdn.agent.v1.AddressFamily
-	3,  // 39: sdn.agent.v1.QueryResponse.kind:type_name -> sdn.agent.v1.QueryKind
-	50, // 40: sdn.agent.v1.QueryResponse.records:type_name -> google.protobuf.Struct
-	26, // 41: sdn.agent.v1.VerifyResourcesRequest.operations:type_name -> sdn.agent.v1.Operation
-	39, // 42: sdn.agent.v1.Registration.capabilities:type_name -> sdn.agent.v1.Capabilities
-	28, // 43: sdn.agent.v1.Agent.Begin:input_type -> sdn.agent.v1.BeginRequest
-	30, // 44: sdn.agent.v1.Agent.Stage:input_type -> sdn.agent.v1.StageRequest
-	31, // 45: sdn.agent.v1.Agent.Commit:input_type -> sdn.agent.v1.CommitRequest
-	33, // 46: sdn.agent.v1.Agent.Abort:input_type -> sdn.agent.v1.AbortRequest
-	34, // 47: sdn.agent.v1.Agent.RetryRollback:input_type -> sdn.agent.v1.RetryRollbackRequest
-	32, // 48: sdn.agent.v1.Agent.GetTask:input_type -> sdn.agent.v1.TaskRequest
-	32, // 49: sdn.agent.v1.Agent.WatchTasks:input_type -> sdn.agent.v1.TaskRequest
-	27, // 50: sdn.agent.v1.Agent.GetState:input_type -> sdn.agent.v1.NodeRequest
-	27, // 51: sdn.agent.v1.Agent.GetCapabilities:input_type -> sdn.agent.v1.NodeRequest
-	42, // 52: sdn.agent.v1.Agent.Query:input_type -> sdn.agent.v1.QueryRequest
-	44, // 53: sdn.agent.v1.Agent.VerifyResources:input_type -> sdn.agent.v1.VerifyResourcesRequest
-	46, // 54: sdn.agent.v1.Controller.Register:input_type -> sdn.agent.v1.Registration
-	48, // 55: sdn.agent.v1.Controller.Heartbeat:input_type -> sdn.agent.v1.Heartbeat
-	29, // 56: sdn.agent.v1.Agent.Begin:output_type -> sdn.agent.v1.Transaction
-	29, // 57: sdn.agent.v1.Agent.Stage:output_type -> sdn.agent.v1.Transaction
-	37, // 58: sdn.agent.v1.Agent.Commit:output_type -> sdn.agent.v1.Task
-	35, // 59: sdn.agent.v1.Agent.Abort:output_type -> sdn.agent.v1.Empty
-	37, // 60: sdn.agent.v1.Agent.RetryRollback:output_type -> sdn.agent.v1.Task
-	37, // 61: sdn.agent.v1.Agent.GetTask:output_type -> sdn.agent.v1.Task
-	37, // 62: sdn.agent.v1.Agent.WatchTasks:output_type -> sdn.agent.v1.Task
-	40, // 63: sdn.agent.v1.Agent.GetState:output_type -> sdn.agent.v1.State
-	39, // 64: sdn.agent.v1.Agent.GetCapabilities:output_type -> sdn.agent.v1.Capabilities
-	43, // 65: sdn.agent.v1.Agent.Query:output_type -> sdn.agent.v1.QueryResponse
-	45, // 66: sdn.agent.v1.Agent.VerifyResources:output_type -> sdn.agent.v1.VerifyResourcesResponse
-	47, // 67: sdn.agent.v1.Controller.Register:output_type -> sdn.agent.v1.Registered
-	35, // 68: sdn.agent.v1.Controller.Heartbeat:output_type -> sdn.agent.v1.Empty
-	56, // [56:69] is the sub-list for method output_type
-	43, // [43:56] is the sub-list for method input_type
-	43, // [43:43] is the sub-list for extension type_name
-	43, // [43:43] is the sub-list for extension extendee
-	0,  // [0:43] is the sub-list for field type_name
+	7,  // 8: sdn.agent.v1.Operation.interface:type_name -> sdn.agent.v1.Interface
+	8,  // 9: sdn.agent.v1.Operation.address:type_name -> sdn.agent.v1.Address
+	9,  // 10: sdn.agent.v1.Operation.tenant:type_name -> sdn.agent.v1.Tenant
+	10, // 11: sdn.agent.v1.Operation.bridge:type_name -> sdn.agent.v1.Bridge
+	11, // 12: sdn.agent.v1.Operation.bridge_port:type_name -> sdn.agent.v1.BridgePort
+	12, // 13: sdn.agent.v1.Operation.binding:type_name -> sdn.agent.v1.Binding
+	13, // 14: sdn.agent.v1.Operation.vxlan:type_name -> sdn.agent.v1.Vxlan
+	14, // 15: sdn.agent.v1.Operation.route:type_name -> sdn.agent.v1.Route
+	6,  // 16: sdn.agent.v1.Operation.neighbor_keepalive:type_name -> sdn.agent.v1.NeighborKeepalive
+	15, // 17: sdn.agent.v1.Operation.ospf:type_name -> sdn.agent.v1.Ospf
+	16, // 18: sdn.agent.v1.Operation.ospf_network:type_name -> sdn.agent.v1.OspfNetwork
+	17, // 19: sdn.agent.v1.Operation.ospf_interface:type_name -> sdn.agent.v1.OspfInterface
+	18, // 20: sdn.agent.v1.Operation.ospf6_interface:type_name -> sdn.agent.v1.Ospf6Interface
+	19, // 21: sdn.agent.v1.Operation.bgp:type_name -> sdn.agent.v1.Bgp
+	20, // 22: sdn.agent.v1.Operation.peer:type_name -> sdn.agent.v1.Peer
+	24, // 23: sdn.agent.v1.Operation.evpn_global:type_name -> sdn.agent.v1.EvpnGlobal
+	25, // 24: sdn.agent.v1.Operation.evpn:type_name -> sdn.agent.v1.Evpn
+	26, // 25: sdn.agent.v1.Operation.l3vni:type_name -> sdn.agent.v1.L3Vni
+	21, // 26: sdn.agent.v1.Operation.bgp_network:type_name -> sdn.agent.v1.BgpNetwork
+	22, // 27: sdn.agent.v1.Operation.bgp_redistribute:type_name -> sdn.agent.v1.BgpRedistribute
+	23, // 28: sdn.agent.v1.Operation.bgp_type5:type_name -> sdn.agent.v1.BgpType5
+	27, // 29: sdn.agent.v1.Transaction.operations:type_name -> sdn.agent.v1.Operation
+	27, // 30: sdn.agent.v1.StageRequest.operations:type_name -> sdn.agent.v1.Operation
+	37, // 31: sdn.agent.v1.Task.steps:type_name -> sdn.agent.v1.StepResult
+	1,  // 32: sdn.agent.v1.Capability.code:type_name -> sdn.agent.v1.OpCode
+	39, // 33: sdn.agent.v1.Capabilities.operations:type_name -> sdn.agent.v1.Capability
+	42, // 34: sdn.agent.v1.Capabilities.queries:type_name -> sdn.agent.v1.QueryCapability
+	50, // 35: sdn.agent.v1.State.observations:type_name -> sdn.agent.v1.State.ObservationsEntry
+	3,  // 36: sdn.agent.v1.QueryCapability.kind:type_name -> sdn.agent.v1.QueryKind
+	2,  // 37: sdn.agent.v1.QueryCapability.families:type_name -> sdn.agent.v1.AddressFamily
+	3,  // 38: sdn.agent.v1.QueryRequest.kind:type_name -> sdn.agent.v1.QueryKind
+	2,  // 39: sdn.agent.v1.QueryRequest.family:type_name -> sdn.agent.v1.AddressFamily
+	3,  // 40: sdn.agent.v1.QueryResponse.kind:type_name -> sdn.agent.v1.QueryKind
+	51, // 41: sdn.agent.v1.QueryResponse.records:type_name -> google.protobuf.Struct
+	27, // 42: sdn.agent.v1.VerifyResourcesRequest.operations:type_name -> sdn.agent.v1.Operation
+	40, // 43: sdn.agent.v1.Registration.capabilities:type_name -> sdn.agent.v1.Capabilities
+	29, // 44: sdn.agent.v1.Agent.Begin:input_type -> sdn.agent.v1.BeginRequest
+	31, // 45: sdn.agent.v1.Agent.Stage:input_type -> sdn.agent.v1.StageRequest
+	32, // 46: sdn.agent.v1.Agent.Commit:input_type -> sdn.agent.v1.CommitRequest
+	34, // 47: sdn.agent.v1.Agent.Abort:input_type -> sdn.agent.v1.AbortRequest
+	35, // 48: sdn.agent.v1.Agent.RetryRollback:input_type -> sdn.agent.v1.RetryRollbackRequest
+	33, // 49: sdn.agent.v1.Agent.GetTask:input_type -> sdn.agent.v1.TaskRequest
+	33, // 50: sdn.agent.v1.Agent.WatchTasks:input_type -> sdn.agent.v1.TaskRequest
+	28, // 51: sdn.agent.v1.Agent.GetState:input_type -> sdn.agent.v1.NodeRequest
+	28, // 52: sdn.agent.v1.Agent.GetCapabilities:input_type -> sdn.agent.v1.NodeRequest
+	43, // 53: sdn.agent.v1.Agent.Query:input_type -> sdn.agent.v1.QueryRequest
+	45, // 54: sdn.agent.v1.Agent.VerifyResources:input_type -> sdn.agent.v1.VerifyResourcesRequest
+	47, // 55: sdn.agent.v1.Controller.Register:input_type -> sdn.agent.v1.Registration
+	49, // 56: sdn.agent.v1.Controller.Heartbeat:input_type -> sdn.agent.v1.Heartbeat
+	30, // 57: sdn.agent.v1.Agent.Begin:output_type -> sdn.agent.v1.Transaction
+	30, // 58: sdn.agent.v1.Agent.Stage:output_type -> sdn.agent.v1.Transaction
+	38, // 59: sdn.agent.v1.Agent.Commit:output_type -> sdn.agent.v1.Task
+	36, // 60: sdn.agent.v1.Agent.Abort:output_type -> sdn.agent.v1.Empty
+	38, // 61: sdn.agent.v1.Agent.RetryRollback:output_type -> sdn.agent.v1.Task
+	38, // 62: sdn.agent.v1.Agent.GetTask:output_type -> sdn.agent.v1.Task
+	38, // 63: sdn.agent.v1.Agent.WatchTasks:output_type -> sdn.agent.v1.Task
+	41, // 64: sdn.agent.v1.Agent.GetState:output_type -> sdn.agent.v1.State
+	40, // 65: sdn.agent.v1.Agent.GetCapabilities:output_type -> sdn.agent.v1.Capabilities
+	44, // 66: sdn.agent.v1.Agent.Query:output_type -> sdn.agent.v1.QueryResponse
+	46, // 67: sdn.agent.v1.Agent.VerifyResources:output_type -> sdn.agent.v1.VerifyResourcesResponse
+	48, // 68: sdn.agent.v1.Controller.Register:output_type -> sdn.agent.v1.Registered
+	36, // 69: sdn.agent.v1.Controller.Heartbeat:output_type -> sdn.agent.v1.Empty
+	57, // [57:70] is the sub-list for method output_type
+	44, // [44:57] is the sub-list for method input_type
+	44, // [44:44] is the sub-list for extension type_name
+	44, // [44:44] is the sub-list for extension extendee
+	0,  // [0:44] is the sub-list for field type_name
 }
 
 func init() { file_api_agent_v1_agent_proto_init() }
@@ -4443,15 +4520,16 @@ func file_api_agent_v1_agent_proto_init() {
 		return
 	}
 	file_api_agent_v1_agent_proto_msgTypes[2].OneofWrappers = []any{}
-	file_api_agent_v1_agent_proto_msgTypes[5].OneofWrappers = []any{}
+	file_api_agent_v1_agent_proto_msgTypes[3].OneofWrappers = []any{}
 	file_api_agent_v1_agent_proto_msgTypes[6].OneofWrappers = []any{}
-	file_api_agent_v1_agent_proto_msgTypes[12].OneofWrappers = []any{}
+	file_api_agent_v1_agent_proto_msgTypes[7].OneofWrappers = []any{}
 	file_api_agent_v1_agent_proto_msgTypes[13].OneofWrappers = []any{}
 	file_api_agent_v1_agent_proto_msgTypes[14].OneofWrappers = []any{}
 	file_api_agent_v1_agent_proto_msgTypes[15].OneofWrappers = []any{}
-	file_api_agent_v1_agent_proto_msgTypes[18].OneofWrappers = []any{}
+	file_api_agent_v1_agent_proto_msgTypes[16].OneofWrappers = []any{}
 	file_api_agent_v1_agent_proto_msgTypes[19].OneofWrappers = []any{}
-	file_api_agent_v1_agent_proto_msgTypes[22].OneofWrappers = []any{
+	file_api_agent_v1_agent_proto_msgTypes[20].OneofWrappers = []any{}
+	file_api_agent_v1_agent_proto_msgTypes[23].OneofWrappers = []any{
 		(*Operation_Network)(nil),
 		(*Operation_Interface)(nil),
 		(*Operation_Address)(nil),
@@ -4461,6 +4539,7 @@ func file_api_agent_v1_agent_proto_init() {
 		(*Operation_Binding)(nil),
 		(*Operation_Vxlan)(nil),
 		(*Operation_Route)(nil),
+		(*Operation_NeighborKeepalive)(nil),
 		(*Operation_Ospf)(nil),
 		(*Operation_OspfNetwork)(nil),
 		(*Operation_OspfInterface)(nil),
@@ -4480,7 +4559,7 @@ func file_api_agent_v1_agent_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_agent_v1_agent_proto_rawDesc), len(file_api_agent_v1_agent_proto_rawDesc)),
 			NumEnums:      4,
-			NumMessages:   46,
+			NumMessages:   47,
 			NumExtensions: 0,
 			NumServices:   2,
 		},

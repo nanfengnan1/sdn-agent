@@ -18,6 +18,9 @@ def inspect_source(root, component, repository, ref):
         "vpp": (
             "extras/sdn-agent/adapter.py",
             "extras/sdn-agent/irb.py",
+            "extras/sdn-agent/keepalive.py",
+            "src/plugins/neighbor_keepalive/neighbor_keepalive.c",
+            "src/plugins/neighbor_keepalive/neighbor_keepalive.api",
             "src/vpp-api/python/vpp_papi/__init__.py",
             "src/plugins/vxlan/multipoint.c",
             "src/plugins/vxlan/vxlan.api",
@@ -43,6 +46,12 @@ def inspect_source(root, component, repository, ref):
                 "vxlan_mp_remote_v2_dump",
             ),
             "src/vnet/l2/l2.api": ("l2_egress_flood",),
+            "src/vnet/ip6-nd/ip6_nd.c": ("ip_neighbor_confirm_dp",),
+            "src/plugins/neighbor_keepalive/neighbor_keepalive.api": (
+                "neighbor_keepalive_set",
+                "neighbor_keepalive_status",
+                "neighbor_keepalive_dump",
+            ),
         }.items():
             text = (root / name).read_text()
             for marker in markers:

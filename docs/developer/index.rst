@@ -27,6 +27,7 @@ AI 工具接入与扩展见 :doc:`MCP 适配层设计 <mcp>`；它通过公开 g
    execution-storage
    adapters
    vpp
+   vpp-keepalive
    mcp
    testing
    release

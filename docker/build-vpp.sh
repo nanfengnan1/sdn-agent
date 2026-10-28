@@ -22,7 +22,7 @@ if [ "$BUILD_BASES" = 1 ]; then
     VPP_MODE=local
     VPP_REF=${VPP_REF:-local}
   else
-    : "${VPP_REF:?set VPP_REF to a committed SDN-compatible tag, branch or commit; or set VPP_SOURCE}"
+    VPP_REF=${VPP_REF:-sdn/v26.06}
     VPP_MODE=git
   fi
   if [ -n "${FRR_SOURCE:-}" ]; then

@@ -15,6 +15,7 @@
 | 7 BD_TENANT | binding | BIND / UNBIND | Linux | bridge、tenant |
 | 8 VXLAN | vxlan | CREATE / DELETE | Linux | name、vni、local、port、learning、underlay |
 | 9 STATIC_ROUTE | route | CREATE / DELETE | Linux | prefix、gateway、interface、table |
+| 10 NEIGHBOR_KEEPALIVE | neighbor_keepalive | SET | 仅 VPP | 必须显式填写 enabled；默认 false，关闭不清空健康邻居 |
 | 20 OSPF_INSTANCE | ospf | CREATE / SET / DELETE | FRR | router_id、vrf |
 | 21 OSPF_NETWORK | ospf_network | CREATE / SET / DELETE | FRR | prefix、area、vrf |
 | 22 OSPF_INTERFACE | ospf_interface | SET / DELETE | FRR | name、vrf、area、passive、network_type、cost、hello_interval、dead_interval |
@@ -56,3 +57,5 @@ BGP instance → peer/group → EVPN activate → RD/RT
 静态 MAC、VLAN-aware bridge、多归属 ESI、BFD、ACL、任意交换机 API 等不在当前协议能力中；未知 code 或不匹配的 oneof 会被拒绝，不能降级成原始 shell/CLI。Type-5、OSPFv3 与结构化查询示例见 [资源手册](user/resources.rst)。
 
 参考：[FRR 10 EVPN 文档](https://docs.frrouting.org/en/stable-10.0/evpn.html)。本版实际兼容结果以固定实验镜像和回归报告为准。
+
+VPP 独占查询 NEIGHBOR_KEEPALIVE_STATUS 返回节点策略和每 IP 探测状态，支持 IPv4/IPv6、VRF、BD、接口及邻居筛选。Linux 不声明此操作/查询。详见 [保活架构](developer/vpp-keepalive.rst)。

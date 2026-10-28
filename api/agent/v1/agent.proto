@@ -7,7 +7,7 @@ enum Action { ACTION_UNSPECIFIED=0; CREATE=1; SET=2; DELETE=3; BIND=4; UNBIND=5;
 enum OpCode {
  OP_UNSPECIFIED=0;
  NODE_NETWORK=1; INTERFACE=2; ADDRESS=3; TENANT=4; BD=5;
- BD_PORT=6; BD_TENANT=7; VXLAN=8; STATIC_ROUTE=9;
+ BD_PORT=6; BD_TENANT=7; VXLAN=8; STATIC_ROUTE=9; NEIGHBOR_KEEPALIVE=10;
  OSPF_INSTANCE=20; OSPF_NETWORK=21; OSPF_INTERFACE=22;
  OSPF6_INSTANCE=23; OSPF6_INTERFACE=24;
  BGP_INSTANCE=30; BGP_PEER_GROUP=31; BGP_NEIGHBOR=32;
@@ -18,6 +18,8 @@ enum OpCode {
 enum AddressFamily { AF_UNSPECIFIED=0; IPV4=1; IPV6=2; L2VPN_EVPN=3; }
 message Sysctl { string key=1; string value=2; bool optional=3; }
 message Network { repeated Sysctl settings=1; }
+// VPP-only node policy. Explicit false disables probing without flushing state.
+message NeighborKeepalive { optional bool enabled=1; }
 message Interface { string name=1; optional uint32 mtu=2; optional string mac=3; optional bool up=4; optional string addrgenmode=5; }
 message Address { string interface=1; string prefix=2; }
 message Tenant { string name=1; uint32 table_id=2; }
@@ -43,6 +45,7 @@ message Operation {
  oneof data {
   Network network=10; Interface interface=11; Address address=12; Tenant tenant=13;
   Bridge bridge=14; BridgePort bridge_port=15; Binding binding=16; Vxlan vxlan=17; Route route=18;
+  NeighborKeepalive neighbor_keepalive=19;
   Ospf ospf=20; OspfNetwork ospf_network=21; OspfInterface ospf_interface=22;
   Ospf6Interface ospf6_interface=23;
   Bgp bgp=30; Peer peer=31; EvpnGlobal evpn_global=32; Evpn evpn=33; L3Vni l3vni=34;
@@ -69,6 +72,7 @@ enum QueryKind {
  ROUTES=5; FDB=6; NEIGHBORS=7; VXLAN_TUNNELS=8;
  BGP_SUMMARY=9; BGP_NEIGHBORS=10; BGP_ROUTES=11; EVPN_ROUTES=12; EVPN_VNI=13;
  OSPF_SUMMARY=14; OSPF_INTERFACES=15; OSPF_NEIGHBORS=16; OSPF_DATABASE=17; OSPF_ROUTES=18; PORTS=19;
+ NEIGHBOR_KEEPALIVE_STATUS=20;
 }
 message QueryCapability { QueryKind kind=1; repeated AddressFamily families=2; repeated uint32 ospf_versions=3; }
 message QueryRequest {

@@ -4,7 +4,8 @@ VPP 数据面适配
 本文描述本仓库与 nanfengnan1/vpp 的当前适配实现：FRR 负责协议与选路，
 Linux 提供 FRR 可识别的控制面对象，VPP 执行业务转发，Agent 管理事务与查询。
 已验证的源码基线为 VPP 26.06 / FRR 10.7.0；可选择构建 ref 不等于任意版本都兼容。
-GitHub 构建入口已提供，但本次适配代码尚待用户提交、推送，远端完整构建尚未验收。
+GitHub 构建默认选择 nanfengnan1/vpp 的 sdn/v26.06 分支；实际源码身份以镜像内
+source.json 为准，构建与运行验证分别记录。
 
 .. contents:: 本页导航
    :local:
@@ -33,7 +34,7 @@ GitHub 构建入口已提供，但本次适配代码尚待用户提交、推送�
 internal/adapters/vpp 是单一 composite Driver，内部复用 Linux 执行与 Undo。
 VPP 模式不能另外注册 Linux Driver，避免重复写同一个资源。
 FRR 的 EVPN / 租户 / Type-5 操作复用现有实现。
-Controller / Web 公共协议未变。Controller 接受双栈 VTEP 和 underlay 邻居，
+Controller / Web 共用 Agent 类型化协议；邻居保活扩展见 :doc:`vpp-keepalive`。Controller 接受双栈 VTEP 和 underlay 邻居，
 configureSystem 启用 IPv6 转发；Web 按 Capabilities 显示查询地址族和 VPP 原生字段。
 联调覆盖真实浏览器 → Gateway → Controller → Agent → VPP，viewer 查询无需配置权限。
 
@@ -386,7 +387,8 @@ FDB 把 Leaf2 Router MAC 02:00:00:00:ff:02 指向 vx50000；Leaf2 的本地主�
 ------------------------------
 
 默认源码仓库为 https://github.com/nanfengnan1/vpp.git 和
-https://github.com/nanfengnan1/frr.git。Dockerfile 的 source-git 阶段在镜像构建环境中
+https://github.com/nanfengnan1/frr.git，默认 ref 分别为 sdn/v26.06 与 frr-10.7.0。
+Dockerfile 的 source-git 阶段在镜像构建环境中
 获取指定 ref，保留 tag 历史用于 VPP 的 git describe；不修改宿主机工作区。
 source-local 阶段使用显式 named build context，允许尚未提交的本地开发源码。
 
@@ -404,7 +406,7 @@ source-local 阶段使用显式 named build context，允许尚未提交的本�
      - 上述 nanfengnan1 仓库
      - Git 来源；仅 source-git 使用，记录到来源元数据。
    * - VPP_REF
-     - 远端构建必填
+     - sdn/v26.06
      - 包含适配代码的 tag、分支或 commit；不能用未打补丁的上游 tag 替代。
    * - FRR_REF
      - frr-10.7.0
@@ -428,15 +430,19 @@ source-local 阶段使用显式 named build context，允许尚未提交的本�
 推荐固定 commit：选择版本是选择源码，不能只把输出镜像改名为某个版本。
 源码阶段检查 adapter.py、irb.py、多点 VXLAN v2 API、l2_egress_flood 等必要文件，
 缺失则在编译前失败；该检查不是跨版本 ABI/依赖兼容认证。
-本次只验证了脚本、参数路由与文档；远端完整镜像编译需在适配代码推送后执行。
+脚本与 VPP 基础 Dockerfile 的默认分支一致；直接使用 Dockerfile 也会选择 sdn/v26.06。
 
 .. code-block:: bash
 
-   # 推送适配源码后执行；把 VPP_REF 替换为真实、包含全部适配代码的 ref。
+   # 使用远端默认分支，避免环境中的本地源码路径覆盖 Git 模式。
    cd ~/program/github/sdn-agent
-   VPP_REF='替换为已推送的适配tag或完整commit' \
+   unset VPP_SOURCE FRR_SOURCE
+   VPP_REF=sdn/v26.06 \
    FRR_REF=frr-10.7.0 BUILD_BASES=1 \
      sh docker/build-vpp.sh
+
+   # 分支更新后重新抓取，或将 VPP_REF 替换为要发布的完整 commit。
+   BUILD_BASES=1 SOURCE_CACHE_BUST="$(date +%s)" sh docker/build-vpp.sh
 
    # 尚未提交时：使用两个本地工作区，不切换分支、不修改代码。
    VPP_SOURCE=/home/alexan/program/subversion/vpp \
@@ -468,6 +474,42 @@ Agent Dockerfile 从这个基础镜像复制整组文件，不再另读 VPP_SOUR
    docker run --rm --entrypoint vpp alpine/sdn-agent:vpp-dev -v
 
 构建入口不会创建 tag、提交或推送仓库，也不会重启容器或修改物理网卡。
+
+2026-10-27 GitHub 分支构建记录
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+在 Linux Docker 宿主机 10.8.126.103 完成 Git 模式的两个基础镜像及 Agent 集成构建，
+没有使用 VPP_SOURCE / FRR_SOURCE 本地源码覆盖。实际来源为：
+
+.. list-table:: 本次构建的源码版本
+   :header-rows: 1
+   :widths: 15 20 65
+
+   * - 组件
+     - 请求 ref
+     - 实际 commit
+   * - nanfengnan1/vpp
+     - sdn/v26.06
+     - 194ee9f7db669e9776dd7e0fd9845ef2d9dd8031
+   * - nanfengnan1/frr
+     - frr-10.7.0
+     - 87fe21fda92ce9e2ba3eaf2b0a327bf71ee183ef
+
+输出 alpine/vpp:sdn-base、alpine/frr:sdn-base 和 alpine/sdn-agent:vpp-github-test。
+集成镜像 ID 为 ab0296d3525d280ae7636fffa0ead0f7ab2a7063cb28412e7b348db1e3dc9e17。
+来源元数据均 dirty=false；vpp -v 带 dirty 后缀是因为构建内应用了 Alpine 兼容补丁，
+补丁保存在 /usr/share/vpp/alpine-compat.patch，不代表使用了宿主机未提交源码。
+PAPI / adapter 导入与原生多点 API 定义检查通过。
+
+该镜像完成四组隔离软件验收，均未挂载宿主机适配脚本：IPv4 / IPv6 underlay
+各运行一次三 Leaf EVPN（每 Leaf 两个 worker）和双 Leaf 对称 IRB。
+二层报告各 23 个布尔检查、IRB 报告各 29 个布尔检查通过，覆盖原生多点 API、
+双栈主机通信、MAC 移动、Type-2/3/5、租户隔离、回滚和撤销；
+IRB 包含连续 40 秒转发零丢包检查。本次没有重复物理 VF、硬件卸载或吞吐验收。
+另有 25 项 Docker 单元测试及 VPP Dockerfile BuildKit 静态检查通过。
+
+构建和实验报告位于 artifacts/vpp/github-sdn-v26.06-20261027-201038/。
+后续分支移动不能沿用这个提交的验收结论；发布时固定以上 commit 或重新验证新提交。
 
 事务和恢复
 ----------
@@ -520,6 +562,15 @@ VPP 构建读取分支声明的 DPDK 版本和校验和，包含 musl 插件加�
    python3 -m unittest discover -s extras/sdn-agent -p 'test_*.py'
 
 集成验收需要 Linux Docker、/dev/net/tun、/dev/vhost-net 和已构建镜像。
+vpp_evpn.py / vpp_irb.py 可用 SDN_VPP_IMAGE 选择待验收镜像，
+SDN_VPP_OUTPUT 指定独立报告目录，避免覆盖以前的实验结果。例如：
+
+.. code-block:: bash
+
+   SDN_VPP_IMAGE=alpine/sdn-agent:vpp-github-test \
+   SDN_VPP_OUTPUT="$PWD/artifacts/vpp/github-check/evpn4" \
+   python3 lab/vpp_evpn.py
+
 开发可设置 SDN_VPP_SOURCE 挂载适配脚本，最终验收必须去掉覆盖，
 确保检查实际打进镜像的代码。该测试不代表物理网卡吞吐、HA 或规模验证。
 vpp_offload.py 创建真实 GSO TAP，验证双向 2 MiB TCP 内容、分段计数、
@@ -544,7 +595,7 @@ sdn-web/tests/e2e/vpp-query.cjs。安装 playwright-core，使用 PLAYWRIGHT_MOD
 不需要浏览器时省略 SDN_VPP_BROWSER，仍会验证真实 HTTP/gRPC 查询链路。
 
 当前每秒全量核对，事件驱动同步、批量 API、多归属、租户协议 punt 通道和
-全量冷启动恢复仍待实现。ARP/ND 主动保活、物理 NIC 性能和大规模收敛尚未验证。
+全量冷启动恢复仍待实现。ARP/ND 主动保活见 :doc:`vpp-keepalive`；物理 NIC 性能和大规模收敛仍需专项验证。
 
 华为物理 VF 实验
 ----------------

@@ -15,18 +15,31 @@ import traceback
 
 ROOT = Path(__file__).resolve().parents[1]
 UNDERLAY6 = os.environ.get("SDN_VPP_UNDERLAY") == "6"
-OUT = ROOT / "artifacts" / "vpp" / ("dual-ipv6" if UNDERLAY6 else ".")
+OUT = Path(
+    os.environ.get(
+        "SDN_VPP_OUTPUT",
+        ROOT / "artifacts" / "vpp" / ("dual-ipv6" if UNDERLAY6 else "."),
+    )
+).resolve()
 OUT.mkdir(parents=True, exist_ok=True)
-STAMP = "sdn-vpp-irb-" + str(int(time.time()))
+STAMP = "sdn-vpp-irb-" + str(int(time.time())) + "-" + secrets.token_hex(3)
+# Independent runs need independent IPv6 pools even when started in one second.
+ula_id = secrets.token_hex(5)
+ULA_PREFIX = f"fd{ula_id[:2]}:{ula_id[2:6]}:{ula_id[6:]}"
 IMAGE = os.environ.get("SDN_VPP_IMAGE", "alpine/sdn-agent:vpp-dev")
 TOKEN = secrets.token_urlsafe(24)
 containers = []
 networks = []
+stack = None
 results = {
     "image": IMAGE,
     "scope": f"EVPN symmetric IRB, IPv{6 if UNDERLAY6 else 4} VTEP, dual-stack inner",
 }
 log = (OUT / "irb.log").open("w", buffering=1)
+
+
+class KeepaliveComplete(Exception):
+    """Skip unrelated destructive IRB regression cases in the focused run."""
 
 
 def run(*args, check=True, timeout=90):
@@ -57,7 +70,7 @@ def cli(name, line):
 
 def ctl(name, command, *args, check=True):
     return de(
-        name, "sdnctl", "-insecure", "-timeout", "40s", *args, command, check=check
+        name, "sdnctl", "-insecure", "-timeout", "80s", *args, command, check=check
     )
 
 
@@ -106,7 +119,20 @@ try:
     results["imageId"] = run(
         "docker", "image", "inspect", IMAGE, "--format", "{{.Id}}"
     ).stdout.strip()
+    IMAGE = results[
+        "imageId"
+    ]  # Pin every test container if a tag is rebuilt concurrently.
     results["sourceOverrides"] = bool(os.environ.get("SDN_VPP_SOURCE"))
+    workers = int(os.environ.get("SDN_VPP_WORKERS", "0"))
+    if not 0 <= workers <= 16:
+        raise ValueError("SDN_VPP_WORKERS must be between 0 and 16")
+    worker_config = OUT / (STAMP + "-vpp.conf")
+    if workers:
+        worker_config.write_text(
+            (ROOT / "docker/vpp/startup.conf").read_text()
+            + f"\ncpu {{ workers {workers} }}\n"
+        )
+    results["workers"] = workers
     config = OUT / (STAMP + "-agent.conf")
     config.write_text(
         json.dumps(
@@ -122,21 +148,29 @@ try:
             [
                 "--ipv6",
                 "--subnet",
-                f"fd42:6:{int(time.time()) % 65536:x}:{network_index}::/64",
+                f"{ULA_PREFIX}:{network_index:x}::/64",
             ]
             if network_index or UNDERLAY6
             else []
         )
         run("docker", "network", "create", *ipv6, name)
         networks.append(name)
+    if os.environ.get("SDN_VPP_STACK") == "1":
+        from vpp_stack import Stack
+
+        stack = Stack(run, OUT, STAMP, networks[0], TOKEN)
     leaves = []
     pcs = []
     for i in (1, 2):
         leaf = STAMP + "-leaf" + str(i)
         pc = STAMP + "-pc" + str(i)
+        if stack:
+            config = stack.agent_config(leaf)
         overrides = []
+        if workers:
+            overrides += ["-v", str(worker_config) + ":/etc/vpp/startup.conf:ro"]
         if os.environ.get("SDN_VPP_SOURCE"):
-            overrides = [
+            overrides += [
                 "-v",
                 str(Path(os.environ["SDN_VPP_SOURCE"]) / "extras/sdn-agent")
                 + ":/usr/local/lib/sdn-agent/vpp:ro",
@@ -214,12 +248,20 @@ try:
             "net.ipv6.conf.all.disable_ipv6=0",
             "--sysctl",
             "net.ipv6.conf.default.disable_ipv6=0",
+            "--sysctl",
+            "net.ipv6.conf.all.accept_ra=0",
+            "--sysctl",
+            "net.ipv6.conf.default.accept_ra=0",
             "alpine:3.22",
             "infinity",
         )
         containers.append(pc)
         pcs.append(pc)
         de(pc, "ip", "addr", "flush", "dev", "eth0")
+        # Docker's IPv6 gateway must not become a fallback next hop while the
+        # emulated Leaf's ND entry is probing. PCs use only the lab gateways.
+        de(pc, "ip", "-6", "route", "flush", "default")
+        de(pc, "ip", "-6", "addr", "flush", "dev", "eth0", "scope", "global")
         de(pc, "ip", "link", "set", "eth0", "address", f"02:00:00:10:00:0{i}")
         de(pc, "ip", "addr", "add", f"192.168.{i*10}.{10+i}/24", "dev", "eth0")
         de(pc, "ip", "route", "replace", "192.168.0.0/16", "via", f"192.168.{i*10}.254")
@@ -437,6 +479,12 @@ try:
         ).returncode
         == 0,
     )
+    if os.environ.get("SDN_VPP_KEEPALIVE_ONLY") == "1":
+        from vpp_keepalive import verify as verify_keepalive
+
+        verify_keepalive(globals())
+        results["status"] = "passed"
+        raise KeepaliveComplete()
     # Verify the path is VPP even while all Linux mirror addresses remain up.
     bvi = next(
         r["vppName"] for r in query(l1, "INTERFACES")["records"] if r["name"] == "br10"
@@ -710,6 +758,10 @@ try:
     stable = de(pcs[0], "ping", "-c", "40", "-W", "1", "192.168.20.12")
     assert ", 0% packet loss" in stable.stdout, stable.stdout
     results["40 seconds of forwarding without mirror NUD withdrawal"] = True
+    if os.environ.get("SDN_VPP_KEEPALIVE") == "1":
+        from vpp_keepalive import verify as verify_keepalive
+
+        verify_keepalive(globals())
     submit(
         l2,
         [
@@ -734,6 +786,8 @@ try:
         and all(r.get("multipoint") and not r.get("remotes") for r in rows),
     )
     results["status"] = "passed"
+except KeepaliveComplete:
+    pass
 except Exception as exc:
     results["status"] = "failed"
     results["error"] = str(exc)
@@ -746,7 +800,9 @@ finally:
                 "show errors",
                 "show bridge-domain",
                 "show l2fib",
+                "show l2fib verbose",
                 "show ip fib",
+                "show ip6 fib",
                 "show ip neighbors",
                 "show interface address",
             ):
@@ -755,6 +811,8 @@ finally:
             de(n, "ip", "-j", "route", "show", "table", "1001", check=False)
             de(n, "ip", "-j", "neigh", "show", check=False)
     if os.environ.get("SDN_VPP_KEEP") != "1":
+        if stack:
+            stack.close()
         for n in reversed(containers):
             run("docker", "rm", "-f", n, check=False)
         for n in reversed(networks):

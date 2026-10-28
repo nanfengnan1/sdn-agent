@@ -24,16 +24,19 @@ adapterSocket 是容器内权限 0600 的 Unix socket，不需要发布端口。
 在 Linux Docker 宿主机执行。VPP 源码需包含本次 l2_egress_flood API 和
 extras/sdn-agent；未修改的 VPP 26.06 镜像不能替代它。
 
-默认源码来自 nanfengnan1/vpp 和 nanfengnan1/frr。支持独立选择源码 tag、分支或
-commit；推荐固定完整 commit。**适配代码尚待推送，远端完整镜像构建待验证**。
-推送后，把下面的 VPP_REF 替换成实际包含适配代码的 ref：
+默认源码为 nanfengnan1/vpp 的 **sdn/v26.06 分支**，以及 nanfengnan1/frr 的
+frr-10.7.0 tag。该 VPP 分支包含原生多点 VXLAN 与 SDN 适配器；上游 v26.06 tag
+不能替代它。支持独立选择其他兼容 tag、分支或 commit，发布时推荐固定完整 commit。
 
 .. code-block:: bash
 
    cd ~/program/github/sdn-agent
-   VPP_REF='替换为已推送的适配tag或完整commit' \
-   FRR_REF=frr-10.7.0 BUILD_BASES=1 \
-     sh docker/build-vpp.sh
+   # 默认 VPP_REF=sdn/v26.06，FRR_REF=frr-10.7.0
+   BUILD_BASES=1 sh docker/build-vpp.sh
+
+   # 分支有新提交时刷新源码构建缓存；使用自选标签保存新镜像
+   BUILD_BASES=1 SOURCE_CACHE_BUST="$(date +%s)" \
+     AGENT_IMAGE=alpine/sdn-agent:vpp-dev sh docker/build-vpp.sh
 
 源码还在本地开发时，使用含 .git 目录的完整本地 clone，无需先提交；
 linked worktree 和没有 Git 历史的源码压缩包不适用于本地构建入口：
@@ -56,12 +59,19 @@ linked worktree 和没有 Git 历史的源码压缩包不适用于本地构建�
 默认构建生成 alpine/vpp:sdn-base、alpine/frr:sdn-base 和 alpine/sdn-agent:vpp-dev。
 VPP_IMAGE / FRR_IMAGE / AGENT_IMAGE 可改输出名字；改镜像标签不会改变源码版本。
 VPP_REF / FRR_REF 才选择远端源码版本，VPP_SOURCE / FRR_SOURCE 分别优先选择本地内容。
+要验证 GitHub 分支时，确保没有设置 VPP_SOURCE / FRR_SOURCE，避免实际使用本地工作区。
 已有新流程生成的匹配基础镜像时，设置 BUILD_BASES=0 即可只重建集成镜像，
 不再要求 VPP_SOURCE。旧 VPP 基础镜像缺少随镜像打包的适配器时，需要先重建一次。
 API JSON、vpp_papi 和适配器都从同一个 VPP 基础镜像复制，避免版本混用。
 实际源码 commit、请求 ref、dirty 和未跟踪文件哈希分别在镜像的
 /usr/share/vpp/source.json、/usr/share/frr/source.json。
 此流程不创建 Git tag、不推送镜像。实现和构建细节见 :doc:`开发说明 </developer/vpp>`。
+
+2026-10-27 已从 GitHub 的 VPP 提交 194ee9f7d 与 FRR frr-10.7.0 完成镜像构建，
+并通过 IPv4 / IPv6 底层各一组二层 EVPN 和对称 IRB 验收。测试镜像为
+alpine/sdn-agent:vpp-github-test，具体 commit、镜像 ID 和验证边界见开发说明。
+vpp_evpn.py / vpp_irb.py 可设置 SDN_VPP_IMAGE 选择镜像、SDN_VPP_OUTPUT
+指定独立报告目录；未设置时沿用下方默认路径。
 
 二层验收创建三个 Leaf、三个 PC 和独立 Docker 网络，使用 VPP AF_PACKET 软件接口，
 通过真实 Agent 事务配置。它不使用物理网卡、PCI、hugepages 或对外端口，
@@ -232,3 +242,53 @@ VPP / 容器重建时，必须由启动配置先恢复接口、LCP pair、underl
 适配器约每秒全量核对，
 不是无延迟的事件同步。VPP / 适配进程退出会导致整个 bundle 停止，
 防止 Agent 在缺少必要后端时继续执行配置。
+
+邻居保活开关
+------------
+
+VPP 节点可以开启本地动态邻居保活，默认关闭。Linux 数据面不支持。
+在 Web 的“二层网络 BD”中选择“邻居保活（节点开关）”，开启后加入候选，
+预览并提交。它作用于本节点受管接入 BD 的 IPv4/IPv6 邻居，
+不是 ARP/ND 抑制，也不是 BGP 会话 keepalive。
+
+也可通过 sdnctl 提交下面的操作文件：
+
+.. code-block:: json
+
+   {
+     "operations": [{
+       "id": "keepalive",
+       "code": "NEIGHBOR_KEEPALIVE",
+       "action": "SET",
+       "neighbor_keepalive": {"enabled": true}
+     }]
+   }
+
+.. code-block:: bash
+
+   docker cp keepalive.json sdn-vpp-node:/tmp/keepalive.json
+   docker exec sdn-vpp-node sdnctl -insecure -file /tmp/keepalive.json submit
+   docker exec sdn-vpp-node sdnctl -insecure -kind NEIGHBOR_KEEPALIVE_STATUS query
+   docker exec sdn-vpp-node sdnctl -insecure -kind NEIGHBOR_KEEPALIVE_STATUS -family IPV6 query
+
+关闭时将 enabled 改为 false，重新提交。关闭不清空健康邻居；它们继续正常老化。
+Controller 已管理的节点应通过 Web/Controller 提交，以免产生配置 revision 漂移。
+
+VPP 向已知本地主机发送单播 ARP Request / IPv6 NS；只有有效邻居学习才续期。
+三次无应答后撤销对应 IP 绑定，FRR 随之撤销 MAC/IP Type-2，
+同 MAC 的其他健康 IP 不受影响。失败后主机重新发包可触发恢复。
+仅有 MAC、没有 IP 绑定的设备以及从未发包的主机不在此功能范围内。
+
+受管 BD 的 MAC 老化时间需要为 0 或 >=120 秒，默认 300 秒无需修改。
+最多跟踪 4096 个绑定，查询中的 send_errors / capacity_errors 应为 0；
+非零时需要检查 BVI 源地址、接入口状态或规模。
+
+默认容器 startup.conf 已加载插件。使用自己挂载的配置时，plugins 内还需要：
+
+.. code-block:: text
+
+   plugin neighbor_keepalive_plugin.so { enable }
+
+必须一起更新 VPP 原生插件、Python 适配器和 Agent 镜像。
+配置写入既有 VPP 状态目录；重启恢复依赖挂载保留该目录及恢复接入口，
+动态主机邻居仍需要重新学习。架构及验证方法见 :doc:`../developer/vpp-keepalive`。

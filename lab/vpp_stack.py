@@ -25,8 +25,18 @@ class Stack:
         self.env = env
         try:
             for name, image, extra in (
-                (self.controller, "alpine/sdn-controller:vpp-dev", []),
-                (self.web, "alpine/sdn-web:vpp-dev", ["-p", "0.0.0.0::8080"]),
+                (
+                    self.controller,
+                    os.environ.get(
+                        "SDN_CONTROLLER_IMAGE", "alpine/sdn-controller:vpp-dev"
+                    ),
+                    [],
+                ),
+                (
+                    self.web,
+                    os.environ.get("SDN_WEB_IMAGE", "alpine/sdn-web:vpp-dev"),
+                    ["-p", "127.0.0.1::8080"],
+                ),
             ):
                 command = (
                     ["-controller", self.controller + ":19090", "-insecure"]
@@ -104,10 +114,15 @@ class Stack:
             headers={
                 "Authorization": "Bearer " + (self.viewer if viewer else self.admin),
                 "Content-Type": "application/json",
+                "Idempotency-Key": secrets.token_hex(16),
             },
         )
-        with urllib.request.urlopen(req, timeout=35) as response:
-            return json.load(response)
+        try:
+            with urllib.request.urlopen(req, timeout=35) as response:
+                return json.load(response)
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode(errors="replace")
+            raise RuntimeError(f"{method} {path}: HTTP {exc.code}: {detail}") from exc
 
     def verify(self, leaves, require_vxlan=True):
         expected = {n["name"] + ":9090" for n in leaves}
@@ -122,11 +137,23 @@ class Stack:
         saved = {}
         for node in nodes:
             nid = node["nodeId"]
-            self.request(
-                f"/nodes/{nid}/adopt",
-                "POST",
-                {"expectedRevision": node["agentRevision"], "allowExisting": True},
-            )
+            # Heartbeat revision can lag a just-completed direct Agent commit.
+            for attempt in range(30):
+                node = self.request(f"/nodes/{nid}")
+                try:
+                    self.request(
+                        f"/nodes/{nid}/adopt",
+                        "POST",
+                        {
+                            "expectedRevision": node["agentRevision"],
+                            "allowExisting": True,
+                        },
+                    )
+                    break
+                except RuntimeError as exc:
+                    if "agent revision conflict" not in str(exc) or attempt == 29:
+                        raise
+                    time.sleep(1)
             saved[nid] = {}
             for kind in (
                 "TENANTS",

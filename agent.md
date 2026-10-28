@@ -2,6 +2,18 @@
 
 更新日期：2026-10-27。
 
+### 2026-10-27：默认使用 GitHub sdn/v26.06 并验证完整源码构建
+
+`docker/build-vpp.sh` 和 `docker/vpp/Dockerfile.base` 的 Git 模式默认使用 `nanfengnan1/vpp` 的 `sdn/v26.06`；FRR 保持 `nanfengnan1/frr` 的 `frr-10.7.0`。仍支持单独覆盖 ref、固定 commit 或使用本地源码。首次构建设置 `BUILD_BASES=1`，移动分支更新后更换 `SOURCE_CACHE_BUST`。本记录取代下文早期“远端 VPP_REF 必填 / 构建待验证”的状态。
+
+已在 10.8.126.103 从 GitHub 构建两个基础镜像和 `alpine/sdn-agent:vpp-github-test`，镜像 ID `ab0296d3525d280ae7636fffa0ead0f7ab2a7063cb28412e7b348db1e3dc9e17`。VPP 实际提交 `194ee9f7db669e9776dd7e0fd9845ef2d9dd8031`，FRR `87fe21fda92ce9e2ba3eaf2b0a327bf71ee183ef`，来源元数据均 `dirty=false`；`vpp -v` 的 dirty 后缀来自镜像内已记录的 Alpine 兼容补丁。PAPI、API JSON 和适配器均从同一 VPP 基础镜像复制，导入和必要 API 检查通过。
+
+新增默认分支回归用例，扩展带斜杠的 Git 分支获取用例；Docker 单元测试 25 项通过，VPP Dockerfile BuildKit 静态检查无警告。`lab/vpp_evpn.py` / `lab/vpp_irb.py` 新增 `SDN_VPP_OUTPUT`，允许指定独立报告目录，保留旧实验记录。本次构建和验收日志保存在 `artifacts/vpp/github-sdn-v26.06-20261027-201038/`。
+
+新镜像通过四组隔离软件组网：IPv4/IPv6 underlay 的三 Leaf EVPN 各 23 个布尔检查（每 Leaf 两个 worker），双 Leaf IRB 各 29 个布尔检查。包含内层双栈、MAC 移动、多点 API、Type-2/3/5、租户隔离、40 秒连续转发、失败回滚及撤销。全部 `sourceOverrides=false`，验证镜像自带适配器；本次未重复物理 VF 或硬件卸载验收。
+
+Agent 全部 HTML 手册与 VPP 适配用户/开发/LCP 页面定向构建均通过 Sphinx 严格检查，已核对 VPP 正式导航入口。测试容器和网络已清理，测试前后原运行容器的名称、ID、镜像一致。未提交或推送 Git，也未覆盖 vpp-dev / v1.0 镜像标签。
+
 ### 2026-10-27：MCP 同步 VPP / EVPN 能力
 
 MCP 保留六个默认只读与六个显式写工具，继续走既有 gRPC。初始化 Instructions、工具描述与 schema 增加 VPP composite、原生 src-only VXLAN、外层双栈、LCP 接口、BD/BVI/L3VNI 与 Router MAC 的语义；能力以实际 Agent 的 operations/backends、queries/families、features 为准。网络查询 source=vpp，协议查询仍来自 FRR；保留原生 records 的嵌套 remotes 和 camelCase 字段，不增加客户端任意选择后端的参数。
@@ -14,7 +26,7 @@ sdn_state 的 observation_error 非空，或 sdn_query 的 error 非空 / stale=
 
 `docs/developer/vpp.rst` 增加 FRR/ZAPI/Netlink/LCP/Unix HTTP/Binary API 分层、Linux/VPP 对象映射、LCP 节点和 TAP/TUN 双向通信、完整对称 IRB 流程。参考 `/home/alexan/vxlan-s-evpn/docs/从零手动配置.txt`，明确业务 BD→BVI→租户 FIB→传输 BVI/BD→L3VNI；Leaf2 出口为 br20。区分参考文件 OSPF+Loopback 与已测静态 underlay/接口 VTEP，不扩大验收结论。
 
-`docker/build-vpp.sh` 与两个基础 Dockerfile 支持 nanfengnan1/vpp、nanfengnan1/frr 的 tag/branch/commit，以及各自的本地工作区。远端 VPP_REF 必填，FRR_REF 默认 frr-10.7.0；BUILD_BASES 默认 0，首次设 1。基础镜像默认名改为 alpine/vpp:sdn-base、alpine/frr:sdn-base，最终仍为 alpine/sdn-agent:vpp-dev，名字与源码版本独立。GitHub 适配源码尚待用户推送，完整远端镜像构建待验证，不能把本次脚本/文档校验写成编译成功。
+`docker/build-vpp.sh` 与两个基础 Dockerfile 支持 nanfengnan1/vpp、nanfengnan1/frr 的 tag/branch/commit，以及各自的本地工作区。该阶段远端 VPP_REF 必填（现已改为默认 sdn/v26.06，见最新记录），FRR_REF 默认 frr-10.7.0；BUILD_BASES 默认 0，首次设 1。基础镜像默认名改为 alpine/vpp:sdn-base、alpine/frr:sdn-base，最终仍为 alpine/sdn-agent:vpp-dev，名字与源码版本独立。该阶段仅完成脚本/文档校验；后续 GitHub 完整源码构建结果见最新记录。
 
 VPP 基础镜像同时保存原生插件/API/PAPI/适配器，Agent 集成不再单独复制外部 VPP_SOURCE，防止版本漂移；旧基础镜像需先重建。构建前检查必要 API/文件，记录实际 commit、ref、dirty、未跟踪文件 SHA256。新版本选择不等于任意 VPP/FRR 组合兼容，已验收仍是本地 VPP26.06/FRR10.7.0。构建不部署、不改网卡、不提交或推送。VPP 仓库另有 `docs/usecases/sdn_agent.rst` 和 `docs/developer/extras/sdn_agent.rst`，分别面向使用者与适配开发者。
 
@@ -217,7 +229,7 @@ Neighbor Maintenance 从 Running 读取已提交策略，从 Operational 获取�
 | FRR BGP / EVPN | 基础 BGP、邻居、EVPN 地址族、RD/RT、VRF-VNI 关联等配置与查询 |
 | 网络感知 | 采集并报告 EVPN Type-2/Type-3、接口、FDB、邻居和执行状态 |
 
-这张表定义目标接口范围。当前已有 Linux / FRR 后端和 VPP EVPN / IRB 实验版；具体操作以 [操作目录](docs/operations.md) 与 [VPP 限制](docs/user/vpp.rst) 为准。交换机、通用静态 MAC 操作、主动 ARP/ND 保活等仍待扩展。不支持的操作必须明确返回能力错误。
+这张表定义目标接口范围。当前已有 Linux / FRR 后端和 VPP EVPN / IRB 实验版；具体操作以 [操作目录](docs/operations.md) 与 [VPP 限制](docs/user/vpp.rst) 为准。交换机、通用静态 MAC 操作等仍待扩展；VPP 主动 ARP/ND 保活见下文实现说明。不支持的操作必须明确返回能力错误。
 
 ### 3.3 当前实现的分层架构
 
@@ -1012,3 +1024,15 @@ Type-2 的 IP 信息可能缺失，未被学习或通告的静默主机也不会
 - [Redis Pub/Sub](https://redis.io/docs/latest/develop/pubsub/#delivery-semantics)：订阅断连时的消息交付限制。
 
 上述资料用于参考职责和语义。本文的 Protobuf 操作、单节点多后端补偿事务、数据库分工及组件接口属于本项目设计，不表示已经实现 NETCONF 协议或满足所有后端的原子提交能力。
+
+## VPP 邻居保活（已实现，验收以实验报告为准）
+
+- 节点级 NEIGHBOR_KEEPALIVE / SET，optional enabled；默认 false，仅 VPP 注册，能力 neighbor-keepalive/v1。
+- VPP src/plugins/neighbor_keepalive 原生主线程进程负责单播 ARP/NS，标准 ARP/ND 学习更新时间是确认依据。Python keepalive.py 只管理开关、BVI/本地接入口范围与查询。
+- 只维护本地动态 MAC/IP，不将远端 EVPN、静态邻居、纯 MAC 项作为探测对象。每 IP 独立三次重试，失败撤销该邻居，不删除共用 MAC。
+- MAC 分钟粒度预留 60 秒，间隔 (age-60)/2 并提前抖动；启用要求 age=0 或 >=120 秒。固定重试 5 秒，最多 3 次，4096 绑定/512 探测每秒上限。
+- Controller 使用 resource/neighbor_keepalive 单例、原有候选与提交；Web 仅支持节点显示开关与 NEIGHBOR_KEEPALIVE_STATUS 查询。
+- 状态 version 3，兼容旧状态默认关闭；Undo 恢复开关。irb.py 对 failed 绑定过滤后再发布。没有新增异步事件 API，也不依赖周期 BGP 重通告。
+- 撤销 Linux 永久镜像邻居前先发 NUD_FAILED，防止 FRR 的永久项删除分支漏撤 Type-2；发布记录覆盖内核提前清理的情况，避让新 MAC/远端项。bridge MAC 只在变化时设置，避免每次同步清空邻居。
+- 详见 docs/developer/vpp-keepalive.rst、docs/user/vpp.rst；隔离容器测试入口 SDN_VPP_KEEPALIVE=1 SDN_VPP_STACK=1 python3 lab/vpp_irb.py。不可把软件端口测试当成物理 NIC 或规模性能验收。
+- 2026-10-27 最终软件验收：IPv4 VTEP + 2 workers + Controller/Web 34 项、IPv6 VTEP 32 项、完整 IRB 复测 29 项通过；40 项 Python、25 项容器、17 项 Web 单测及 Go 测试通过。见 artifacts/vpp/keepalive/validation.json；首次 IPv6 Type-5 超时复测未重现，仍保留跟踪记录。
