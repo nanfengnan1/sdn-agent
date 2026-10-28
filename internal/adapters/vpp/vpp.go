@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 	pb "sdn-agent/api/agent/v1"
 	"sdn-agent/internal/adapters/frr"
 	"sdn-agent/internal/adapters/linux"
@@ -74,9 +75,40 @@ func (d *Driver) Codes() []pb.OpCode {
 	return []pb.OpCode{pb.OpCode_NEIGHBOR_KEEPALIVE, pb.OpCode_NODE_NETWORK, pb.OpCode_INTERFACE, pb.OpCode_ADDRESS, pb.OpCode_TENANT, pb.OpCode_BD, pb.OpCode_BD_PORT, pb.OpCode_BD_TENANT, pb.OpCode_TENANT_L3VNI, pb.OpCode_VXLAN, pb.OpCode_STATIC_ROUTE}
 }
 func (d *Driver) Features() []string {
-	return []string{"dataplane/vpp-26.06", "neighbor-keepalive/v1", "evpn-l2/v1", "evpn-irb/v1", "vxlan-multipoint/v1", "vxlan-dualstack/v1", "vxlan-software-gso/v1", "linux-control-mirror/v1"}
+	return []string{"dataplane/vpp-26.06", "vxlan-encap-vrf/v1", "neighbor-keepalive/v1", "evpn-l2/v1", "evpn-irb/v1", "vxlan-multipoint/v1", "vxlan-dualstack/v1", "vxlan-software-gso/v1", "linux-control-mirror/v1"}
+}
+
+// VXLAN SET is coordinated by the adapter, including its Linux lower-device
+// mapping. The normal Linux driver cannot express an underlay table ID.
+func nativeVXLANSet(o *pb.Operation) bool {
+	return o != nil && o.Code == pb.OpCode_VXLAN && o.Action == pb.Action_SET
+}
+func mirrorOp(o *pb.Operation) *pb.Operation {
+	if o == nil || o.Code != pb.OpCode_VXLAN {
+		return o
+	}
+	copy := proto.Clone(o).(*pb.Operation)
+	if copy.GetVxlan() != nil {
+		copy.GetVxlan().EncapVrfId = nil
+	}
+	return copy
 }
 func (d *Driver) Validate(o *pb.Operation) error {
+	if x := o.GetVxlan(); x != nil && (x.GetEncapVrfId() == ^uint32(0) || (x.GetEncapVrfId() >= 253 && x.GetEncapVrfId() <= 255)) {
+		return fmt.Errorf("invalid/reserved VXLAN outer VRF table ID")
+	}
+	if nativeVXLANSet(o) {
+		x := o.GetVxlan()
+		if x == nil || x.EncapVrfId == nil || x.Vni != 0 || x.Local != "" || x.Port != 0 || x.Learning {
+			return fmt.Errorf("VXLAN SET requires name and explicit encap_vrf_id; only underlay may also change")
+		}
+		check := mirrorOp(o)
+		check.Action = pb.Action_CREATE
+		check.GetVxlan().Vni = 1
+		check.GetVxlan().Local = "192.0.2.1"
+		return d.Linux.Validate(check)
+	}
+
 	if o.Code == pb.OpCode_NEIGHBOR_KEEPALIVE {
 		if o.Action != pb.Action_SET || o.GetNeighborKeepalive() == nil || o.GetNeighborKeepalive().Enabled == nil {
 			return fmt.Errorf("VPP neighbor keepalive requires SET and explicit enabled boolean")
@@ -86,7 +118,7 @@ func (d *Driver) Validate(o *pb.Operation) error {
 	if o.Code == pb.OpCode_TENANT_L3VNI {
 		return (&frr.Driver{}).Validate(o)
 	}
-	if e := d.Linux.Validate(o); e != nil {
+	if e := d.Linux.Validate(mirrorOp(o)); e != nil {
 		return e
 	}
 	supported := false
@@ -115,8 +147,8 @@ func (d *Driver) Prepare(ctx context.Context, o *pb.Operation) (*model.Undo, err
 	}
 	l := &model.Undo{}
 	var e error
-	if o.Code != pb.OpCode_TENANT_L3VNI && o.Code != pb.OpCode_NEIGHBOR_KEEPALIVE {
-		l, e = d.Linux.Prepare(ctx, o)
+	if o.Code != pb.OpCode_TENANT_L3VNI && o.Code != pb.OpCode_NEIGHBOR_KEEPALIVE && !nativeVXLANSet(o) {
+		l, e = d.Linux.Prepare(ctx, mirrorOp(o))
 	}
 	if e != nil {
 		return nil, e
@@ -133,8 +165,8 @@ func (d *Driver) Prepare(ctx context.Context, o *pb.Operation) (*model.Undo, err
 	return &model.Undo{Data: data}, e
 }
 func (d *Driver) Apply(ctx context.Context, o *pb.Operation) error {
-	if o.Code != pb.OpCode_TENANT_L3VNI && o.Code != pb.OpCode_NEIGHBOR_KEEPALIVE {
-		if e := d.Linux.Apply(ctx, o); e != nil {
+	if o.Code != pb.OpCode_TENANT_L3VNI && o.Code != pb.OpCode_NEIGHBOR_KEEPALIVE && !nativeVXLANSet(o) {
+		if e := d.Linux.Apply(ctx, mirrorOp(o)); e != nil {
 			return e
 		}
 	}
@@ -145,8 +177,8 @@ func (d *Driver) Apply(ctx context.Context, o *pb.Operation) error {
 	return d.RPC.Call(ctx, "apply", b, nil)
 }
 func (d *Driver) Verify(ctx context.Context, o *pb.Operation) error {
-	if o.Code != pb.OpCode_TENANT_L3VNI && o.Code != pb.OpCode_NEIGHBOR_KEEPALIVE {
-		if e := d.Linux.Verify(ctx, o); e != nil {
+	if o.Code != pb.OpCode_TENANT_L3VNI && o.Code != pb.OpCode_NEIGHBOR_KEEPALIVE && !nativeVXLANSet(o) {
+		if e := d.Linux.Verify(ctx, mirrorOp(o)); e != nil {
 			return e
 		}
 	}
@@ -167,11 +199,19 @@ func (d *Driver) Rollback(ctx context.Context, o *pb.Operation, u *model.Undo) e
 	if before.Linux == nil || len(before.VPP) == 0 {
 		return fmt.Errorf("incomplete VPP Undo")
 	}
+	// Restoring a deleted VXLAN needs its Linux mirror before the adapter
+	// restores the outer table. Creation rollback keeps the inverse order.
+	restoreMirrorFirst := o.Code == pb.OpCode_VXLAN && o.Action == pb.Action_DELETE
+	if restoreMirrorFirst {
+		if e := d.Linux.Rollback(ctx, mirrorOp(o), before.Linux); e != nil {
+			return e
+		}
+	}
 	if e := d.RPC.Call(ctx, "rollback", before.VPP, nil); e != nil {
 		return e
 	}
-	if o.Code != pb.OpCode_TENANT_L3VNI && o.Code != pb.OpCode_NEIGHBOR_KEEPALIVE {
-		if e := d.Linux.Rollback(ctx, o, before.Linux); e != nil {
+	if !restoreMirrorFirst && o.Code != pb.OpCode_TENANT_L3VNI && o.Code != pb.OpCode_NEIGHBOR_KEEPALIVE && !nativeVXLANSet(o) {
+		if e := d.Linux.Rollback(ctx, mirrorOp(o), before.Linux); e != nil {
 			return e
 		}
 	}

@@ -104,7 +104,7 @@ def verify(lab):
     switch(True)
     saved = json.loads(de(l2, "cat", "/var/lib/sdn-agent/vpp.json").stdout)
     assert (
-        saved["version"] == 3
+        saved["version"] == 4
         and saved["desired"]["neighborKeepalive"]["enabled"] is True
     )
     results["enabled policy is persisted in adapter state"] = True
@@ -115,7 +115,10 @@ def verify(lab):
         lambda: target(l2, "192.168.20.12") and target(l2, "2001:db8:20::12"),
     )
     # Native probes must keep working without the Python adapter scheduling them.
-    pid = de(l2, "pgrep", "-f", "^python3 .*vpp/adapter.py").stdout.strip()
+    # Health checks invoke adapter.py too, but only the daemon has --api.
+    pid = de(
+        l2, "pgrep", "-f", "^python3 .*vpp/adapter[.]py .* --api "
+    ).stdout.strip()
     supervisor = de(
         l2, "pgrep", "-f", "^python3 .*sdn-agent/supervisor.py($| -config)"
     ).stdout.strip()

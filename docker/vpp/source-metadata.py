@@ -44,6 +44,7 @@ def inspect_source(root, component, repository, ref):
             "src/plugins/vxlan/vxlan.api": (
                 "vxlan_mp_remote_add_del_v2",
                 "vxlan_mp_remote_v2_dump",
+                "vxlan_set_encap_vrf",
             ),
             "src/vnet/l2/l2.api": ("l2_egress_flood",),
             "src/vnet/ip6-nd/ip6_nd.c": ("ip_neighbor_confirm_dp",),

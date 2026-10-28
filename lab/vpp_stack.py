@@ -140,6 +140,9 @@ class Stack:
             # Heartbeat revision can lag a just-completed direct Agent commit.
             for attempt in range(30):
                 node = self.request(f"/nodes/{nid}")
+                # An existing managed baseline must not be adopted again.
+                if node.get("adopted"):
+                    break
                 try:
                     self.request(
                         f"/nodes/{nid}/adopt",

@@ -187,6 +187,9 @@ func (d *Driver) Validate(o *pb.Operation) error {
 		if x == nil {
 			return fmt.Errorf("vxlan required")
 		}
+		if x.GetEncapVrfId() != 0 {
+			return fmt.Errorf("explicit VXLAN encap_vrf_id requires the VPP backend")
+		}
 		if e := allowed(pb.Action_CREATE, pb.Action_DELETE); e != nil {
 			return e
 		}
@@ -278,7 +281,14 @@ func up(l *link) bool {
 	}
 	return false
 }
-func num(n any) string { return fmt.Sprint(n) }
+func num(n any) string {
+	// JSON object numbers decode as float64. Keep integer IDs in decimal;
+	// scientific notation breaks readback and inverse iproute2 commands.
+	if v, ok := n.(float64); ok {
+		return strconv.FormatFloat(v, 'f', -1, 64)
+	}
+	return fmt.Sprint(n)
+}
 func on(b bool) string {
 	if b {
 		return "on"

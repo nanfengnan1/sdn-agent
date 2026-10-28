@@ -1,6 +1,23 @@
 # SDN Controller 与 Agent 能力及组件设计
 
-更新日期：2026-10-27。
+## 2026-10-28：VXLAN 外层 VRF 创建与修改
+
+已实现配置字段 encapVrfId / protobuf encap_vrf_id，默认 0，与 BD/BVI 的内层租户 VRF 独立。
+Web 提供创建字段、修改操作及查询列；Controller 按 vxlan-encap-vrf/v1 校验能力并生成 VXLAN SET；
+Agent/适配器持久化、校验、执行与回滚；VPP 新增 vxlan_set_encap_vrf API 和
+set vxlan tunnel <interface> encap-vrf-id <table-id> CLI。
+保留接口/VNI/BD、远端 MAC/BUM，迁移外层收发 FIB；支持 IPv4/IPv6 和多点/固定目的接口。
+Linux 控制镜像更新 lower device，不改变 tenant bridge master。状态文件 v4 兼容读取 v1/2/3。
+Underlay/LCP、物理接口归属及路由仍由启动配置准备；不承诺无损切换。
+组播目的/RX flow offload 的在线迁移明确拒绝。旧 VRF 必须在隧道切换后另行删除。
+开发验收使用独立 :encap-vrf-test 镜像及隔离容器，不替换运行中的 fabric，不发布、不提交/推送代码。
+详细操作和边界见相应用户及开发文档的“VXLAN 外层 VRF”章节。
+默认 BGP 实例需能解析远端 VTEP；承载 VRF 独立时可由部署配置使用 FRR nexthop-vrf 泄漏真实路由。VXLAN SET 不自动修改这部分 Underlay 配置。
+
+验收记录：45 项 Python 适配器测试、25 项 Docker/Python 测试、Agent/Controller/Gateway 全部 Go 测试、Web 18 项测试及类型检查/构建通过；真实浏览器验证提交显式 0 与查询列。原生 IPv4/IPv6 的多点/固定目的 CLI/API 在 0 和 2 worker 下通过；两个独立整栈实验（IPv4/IPv6 VTEP，内层双栈，0 worker）均通过 0→100→200→0、配置重载、失败修改和删除回滚。实验未使用物理网卡。汇总位于配套 Agent 的 artifacts/vpp/encap-vrf-20261028-143107/verification.json。测试容器与网络已清理。
+
+
+更新日期：2026-10-28。
 
 ### 2026-10-27：默认使用 GitHub sdn/v26.06 并验证完整源码构建
 

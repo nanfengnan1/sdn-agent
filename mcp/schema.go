@@ -64,7 +64,7 @@ var messageDescriptions = map[protoreflect.FullName]string{
 	"sdn.agent.v1.Operation": "Typed network intent for the configured Agent backend. Read capabilities first. Does not accept shell commands, VPP CLI, startup files or dataplane changes.",
 	"sdn.agent.v1.Tenant":    "Linux VRF; in VPP mode also owns independent IPv4/IPv6 tenant FIBs. The tenant table ID is distinct from a VNI or BD ID.",
 	"sdn.agent.v1.Bridge":    "Linux bridge; in VPP mode maps to an owned BD and, when tenant-bound, a BVI. VPP does not support STP.",
-	"sdn.agent.v1.Vxlan":     "EVPN VXLAN object. In VPP mode one source-only multipoint interface per VNI; remote endpoints come from EVPN. No dst, remote or is_l3 input is supported.",
+	"sdn.agent.v1.Vxlan":     "EVPN VXLAN; VPP uses a source-only multipoint interface. CREATE uses local/VNI and optional encap_vrf_id (outer table ID, default 0). VPP VXLAN SET requires name and explicit encap_vrf_id, including 0; optionally change underlay. Other identity fields cannot change. Requires vxlan-encap-vrf/v1. Distinct from the BD/BVI tenant VRF. No dst or is_l3 input.",
 	"sdn.agent.v1.L3Vni":     "Associate a tenant with an existing L3VNI. For VPP symmetric IRB first create the tenant-bound transport BD/BVI, Router MAC and Ethernet VXLAN port; this association alone does not create the forwarding path.",
 }
 

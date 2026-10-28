@@ -15,6 +15,7 @@ import traceback
 
 ROOT = Path(__file__).resolve().parents[1]
 UNDERLAY6 = os.environ.get("SDN_VPP_UNDERLAY") == "6"
+ENCAP_TEST = os.environ.get("SDN_VPP_ENCAP_VRF_ONLY") == "1"
 OUT = Path(
     os.environ.get(
         "SDN_VPP_OUTPUT",
@@ -142,7 +143,7 @@ try:
             }
         )
     )
-    for network_index, suffix in enumerate(("underlay", "access1", "access2")):
+    for network_index, suffix in enumerate(("underlay", "access1", "access2") + (("data",) if ENCAP_TEST else ())):
         name = STAMP + "-" + suffix
         ipv6 = (
             [
@@ -208,18 +209,22 @@ try:
         )
         containers.append(leaf)
         leaves.append(leaf)
+        if ENCAP_TEST:
+            run("docker", "network", "connect", networks[3], leaf)
         run("docker", "network", "connect", networks[i], leaf)
         wait("leaf" + str(i) + " bundle healthy", lambda n=leaf: startup(n))
         info = json.loads(run("docker", "inspect", leaf).stdout)[0]
         underlay_info = info["NetworkSettings"]["Networks"][networks[0]]
         router_id = underlay_info["IPAddress"]
-        ip = underlay_info["GlobalIPv6Address"] if UNDERLAY6 else router_id
+        if ENCAP_TEST:
+            underlay_info = info["NetworkSettings"]["Networks"][networks[3]]
+        ip = underlay_info["GlobalIPv6Address"] if UNDERLAY6 else underlay_info["IPAddress"]
         prefix = (
             underlay_info["GlobalIPv6PrefixLen"]
             if UNDERLAY6
             else underlay_info["IPPrefixLen"]
         )
-        for original, mirror in (("eth0", "uplink"), ("eth1", "access0")):
+        for original, mirror in ((("eth1", "uplink"), ("eth2", "access0")) if ENCAP_TEST else (("eth0", "uplink"), ("eth1", "access0"))):
             cli(leaf, "create host-interface name " + original)
             cli(leaf, "set interface state host-" + original + " up")
             cli(leaf, "lcp create host-" + original + " host-if " + mirror)
@@ -266,7 +271,7 @@ try:
         de(pc, "ip", "addr", "add", f"192.168.{i*10}.{10+i}/24", "dev", "eth0")
         de(pc, "ip", "route", "replace", "192.168.0.0/16", "via", f"192.168.{i*10}.254")
     for i, leaf in enumerate(leaves, 1):
-        n, peer, seg = leaf["name"], leaves[2 - i]["ip"], i * 10
+        n, peer, seg = leaf["name"], leaves[2 - i]["router_id" if ENCAP_TEST else "ip"], i * 10
         ops = [
             op("INTERFACE", "SET", "interface", name="uplink", up=True),
             op(
@@ -302,7 +307,7 @@ try:
                     name=vx,
                     vni=vni,
                     local=leaf["ip"],
-                    underlay="uplink",
+                    **({} if ENCAP_TEST else {"underlay": "uplink"}),
                     port=4789,
                     learning=False,
                 ),
@@ -479,6 +484,11 @@ try:
         ).returncode
         == 0,
     )
+    if ENCAP_TEST:
+        from vpp_encap_vrf import verify as verify_encap_vrf
+        verify_encap_vrf(globals())
+        results["status"] = "passed"
+        raise KeepaliveComplete()
     if os.environ.get("SDN_VPP_KEEPALIVE_ONLY") == "1":
         from vpp_keepalive import verify as verify_keepalive
 
@@ -489,7 +499,10 @@ try:
     bvi = next(
         r["vppName"] for r in query(l1, "INTERFACES")["records"] if r["name"] == "br10"
     )
-    adapter_pid = de(l1, "pgrep", "-f", "^python3 .*vpp/adapter.py").stdout.strip()
+    # Exclude concurrent adapter.py --health invocations.
+    adapter_pid = de(
+        l1, "pgrep", "-f", "^python3 .*vpp/adapter[.]py .* --api "
+    ).stdout.strip()
     assert adapter_pid.isdecimal(), adapter_pid
     de(l1, "kill", "-STOP", adapter_pid)
     try:

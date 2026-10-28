@@ -195,7 +195,7 @@ class SourceFixture(unittest.TestCase):
             "src/plugins/neighbor_keepalive/neighbor_keepalive.api": "neighbor_keepalive_set neighbor_keepalive_status neighbor_keepalive_dump\n",
             "src/vpp-api/python/vpp_papi/__init__.py": "# fixture\n",
             "src/plugins/vxlan/multipoint.c": "/* fixture */\n",
-            "src/plugins/vxlan/vxlan.api": "vxlan_mp_remote_add_del_v2 vxlan_mp_remote_v2_dump\n",
+            "src/plugins/vxlan/vxlan.api": "vxlan_mp_remote_add_del_v2 vxlan_mp_remote_v2_dump vxlan_set_encap_vrf\n",
             "src/vnet/l2/l2.api": "l2_egress_flood\n",
             "src/vnet/ip6-nd/ip6_nd.c": "ip_neighbor_confirm_dp\n",
             "build/external/packages/dpdk.mk": "dpdk_version := 26.03\n",

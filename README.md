@@ -1,5 +1,7 @@
 # sdn-agent
 
+VPP VXLAN 支持创建时选择、创建后修改外层 VRF（encapVrfId），保留接口/VNI/BD 与远端映射；支持显式回到默认表、持久化和事务回滚。需要配套 vxlan_set_encap_vrf 原生 API。承载网络及 FRR 下一跳解析须预先准备，见 [外层 VRF 使用与限制](docs/user/vpp.rst)。
+
 新增 **VPP + FRR EVPN 实验模式**：配置选择 Linux 或 VPP，支持租户 FIB、BD/BVI、L2VNI/L3VNI、对称 IRB，以及 FRR Type-2、Type-3、Type-5 到 VPP 的同步。Linux 保留控制面镜像，业务转发在 VPP。原生多点 VXLAN 每个 VNI 一个接口，创建时只指定本地 `src`，EVPN 动态维护 MAC→VTEP 与 BUM 复制成员；支持外层和内层 IPv4/IPv6、软件 TCP GSO 分段及校验和处理。Web 可通过 Controller 查询原生接口、路由和远端映射。集成开发镜像为 `alpine/sdn-agent:vpp-dev`，硬件 VXLAN TSO/LRO 与生产性能尚未验收。构建、隔离验收和恢复限制见 [VPP 用户手册](docs/user/vpp.rst) 与 [适配实现](docs/developer/vpp.rst)。
 
 VPP/FRR 源码构建默认使用 `nanfengnan1/vpp` 的 **`sdn/v26.06` 分支**和 `nanfengnan1/frr` 的 `frr-10.7.0` tag，也可通过 `VPP_REF`、`FRR_REF` 选择其他兼容 ref，或使用本地源码。首次执行 `BUILD_BASES=1 sh docker/build-vpp.sh`；镜像标签与源码版本分开配置，发布时建议固定完整 commit。VPP 原生插件与 Python 适配器随同一基础镜像打包。具体命令、构建验收范围及完整转发图见上述文档。

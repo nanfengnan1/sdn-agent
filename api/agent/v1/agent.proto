@@ -26,7 +26,7 @@ message Tenant { string name=1; uint32 table_id=2; }
 message Bridge { string name=1; optional bool stp=2; optional uint32 mtu=3; optional string mac=4; optional uint32 ageing_time=5; }
 message BridgePort { string bridge=1; string port=2; optional bool learning=3; optional bool neigh_suppress=4; }
 message Binding { string bridge=1; string tenant=2; }
-message Vxlan { string name=1; uint32 vni=2; string local=3; uint32 port=4; bool learning=5; string underlay=6; }
+message Vxlan { string name=1; uint32 vni=2; string local=3; uint32 port=4; bool learning=5; string underlay=6; optional uint32 encap_vrf_id=7; }
 message Route { string prefix=1; string gateway=2; string interface=3; uint32 table=4; }
 message Ospf { string router_id=1; string vrf=2; }
 message OspfNetwork { string prefix=1; string area=2; string vrf=3; }
