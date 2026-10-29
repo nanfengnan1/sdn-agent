@@ -52,6 +52,7 @@ VPP 实验基线为 VPP 26.06 / FRR 10.7.0，FRR 10.0.0 属于历史回归版本
    transactions
    evpn-lab
    vpp
+   ips
    troubleshooting
 
 先分清操作位置
@@ -75,7 +76,8 @@ VPP 实验基线为 VPP 26.06 / FRR 10.7.0，FRR 10.0.0 属于历史回归版本
 
 VPP + FRR 的二层 EVPN、租户 FIB、L3VNI 和对称 IRB 见 :doc:`vpp`，
 通过配置选择数据面并重启生效。硬件交换机驱动、FPM / ZAPI 接收器、
-主动 ARP / ND 保活和全量冷启动 Running 重放仍未实现。
+Linux 数据面的主动 ARP / ND 保活和全量冷启动 Running 重放仍未实现；
+VPP 已支持可选邻居保活，参见 :doc:`vpp`。
 Type-2 / Type-3 观测提供 Overlay 信息，不能独立还原物理布线。
 
 修改代码或增加驱动，请阅读 :doc:`开发指南 </developer/index>`。

@@ -151,3 +151,39 @@ func TestDataplaneSelection(t *testing.T) {
 		}
 	}
 }
+
+func TestIPSRequiresVPPAndBundledRedis(t *testing.T) {
+	path := confFile(t, `{"agent":{"dataplane":"vpp","insecure":true},"redis":{"enabled":true},"ips":{"enabled":true}}`)
+	opts, err := Parse([]string{"-config", path}, environment(envToken, true), io.Discard)
+	if err != nil || !opts.IPS.Enabled {
+		t.Fatal(opts, err)
+	}
+	if _, err = Parse([]string{"-config", path, "-dataplane", "linux"}, environment(envToken, true), io.Discard); err == nil {
+		t.Fatal("Linux IPS accepted")
+	}
+	opts.Redis.Enabled = false
+	if opts.Validate() == nil {
+		t.Fatal("IPS without bundled Redis accepted")
+	}
+	opts.Redis.Enabled = true
+	opts.IPS.Socket = opts.VPP.APISocket
+	if opts.Validate() == nil {
+		t.Fatal("shared service socket accepted")
+	}
+}
+
+func TestIPSExternalBaseConfiguration(t *testing.T) {
+	opts, err := Parse([]string{"-config", confFile(t, `{"agent":{"dataplane":"vpp","insecure":true},"redis":{"enabled":true},"ips":{"enabled":true,"configFile":"/external/snort.lua","autoReload":true}}`)}, environment(envToken, true), io.Discard)
+	if err != nil || opts.IPS.ConfigFile != "/external/snort.lua" || !opts.IPS.AutoReload {
+		t.Fatal(opts.IPS, err)
+	}
+	if Defaults().IPS.ConfigFile != "/etc/sdn-agent/snort/base.lua" || Defaults().IPS.AutoReload {
+		t.Fatal("unexpected external config defaults")
+	}
+	for _, path := range []string{"relative.lua", "/", "/bad\npath", "/var/lib/sdn-agent/ips/snort.lua"} {
+		opts.IPS.ConfigFile = path
+		if opts.Validate() == nil {
+			t.Fatalf("unsafe base path accepted: %q", path)
+		}
+	}
+}

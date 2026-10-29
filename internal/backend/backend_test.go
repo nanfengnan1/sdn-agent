@@ -8,6 +8,7 @@ import (
 	pb "sdn-agent/api/agent/v1"
 	"sdn-agent/internal/adapters/frr"
 	"sdn-agent/internal/adapters/linux"
+	"sdn-agent/internal/adapters/snort"
 	"sdn-agent/internal/backend"
 )
 
@@ -31,9 +32,9 @@ func TestCapabilitiesCoverProtocolOperations(t *testing.T) {
 		}
 	}
 	for n, name := range pb.OpCode_name {
-		if pb.OpCode(n) == pb.OpCode_NEIGHBOR_KEEPALIVE {
+		if pb.OpCode(n) == pb.OpCode_NEIGHBOR_KEEPALIVE || pb.OpCode(n) == pb.OpCode_IPS_RULE || pb.OpCode(n) == pb.OpCode_IPS_INTERFACE {
 			if covered[pb.OpCode(n)] {
-				t.Fatal("Linux must not advertise VPP neighbor keepalive")
+				t.Fatal("default Linux registry must not advertise optional VPP/IPS operations")
 			}
 			continue
 		}
@@ -92,5 +93,21 @@ func TestPlanNetworkLifecycleDependencies(t *testing.T) {
 				t.Fatalf("missing dependency yielded executable plan: %v %v", plan, err)
 			}
 		})
+	}
+}
+
+func TestOptionalSnortCapabilities(t *testing.T) {
+	r, err := backend.New(&snort.Driver{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	caps := r.Capabilities("node")
+	if len(caps.Operations) != 2 || len(caps.Queries) != 2 {
+		t.Fatal(caps)
+	}
+	for _, c := range caps.Operations {
+		if !c.Rollback || !reflect.DeepEqual(c.Backends, []string{"snort"}) {
+			t.Fatal(c)
+		}
 	}
 }

@@ -103,3 +103,23 @@ docker start sdna-doc-demo
 迁移原独立 Redis 时停止旧实例、备份，然后把旧 `/data` 卷挂到 `/var/lib/redis`，不能同时打开同一个卷。启动器只处理专属目录中的 Redis 文件，拒绝系统路径、与 Agent 身份目录重叠及无关文件；不会删除旧数据。任一必需进程失效会使整个容器失败退出。
 
 每个节点必须使用独立身份/状态卷。容器网络命名空间重建后，手工 veth 和 Linux 配置不保证保留，当前没有完整自动重建能力；保留卷不等于业务网络自动恢复。停止和重启后都需重新检查实际网络，尤其不要把删除数据卷作为日常升级步骤。
+
+## 6. VPP、FRR 与 Snort IPS 集成镜像
+
+默认 Dockerfile 是 Linux 数据面镜像；VPP 使用 `docker/Dockerfile.vpp`。
+后者集成 VPP、FRR、Redis、Snort3、confd 以及 Agent；无需为 Agent 另加 etcd。
+构建、宿主机配置挂载和 Web 规则操作按 [IPS 使用手册](../docs/user/ips.rst) 执行；
+基础参数与托管规则的版本、校验和恢复边界见 [开发设计](../docs/developer/ips.rst)。
+
+`docker/build-vpp.sh` 支持独立选择 VPP/FRR/Snort 镜像和源码版本；
+只复用基础镜像时不会自动拉取远端新代码。
+最终 Agent 镜像记录源码 revision，构建时验证 Snort/confd 和 VPP DAQ 存在。
+检查版本可执行：
+
+```sh
+docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' alpine/sdn-agent:v1.0
+```
+
+更新已有容器需要用新镜像重新创建；docker restart 仍使用原来的镜像。
+先备份 Controller/Agent 状态、FRR 和宿主机基础配置，按网络恢复流程重建网口和连线，
+再验证双栈转发、EVPN、邻居保活与 IPS。不要把保留状态目录等同于恢复了手工创建的网络。

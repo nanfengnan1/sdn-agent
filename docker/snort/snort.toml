@@ -1,0 +1,8 @@
+# Agent fills the paths for its private render directory.
+[template]
+src = "snort.lua.tmpl"
+dest = @DEST@
+mode = "0600"
+keys = ["/sdn/ips/v1/render"]
+check_cmd = @CHECK@
+reload_cmd = @RELOAD@

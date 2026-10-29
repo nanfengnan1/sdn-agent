@@ -114,7 +114,7 @@ class Stack:
             headers={
                 "Authorization": "Bearer " + (self.viewer if viewer else self.admin),
                 "Content-Type": "application/json",
-                "Idempotency-Key": secrets.token_hex(16),
+                "Idempotency-Key": (body or {}).get("requestId") or secrets.token_hex(16),
             },
         )
         try:

@@ -163,3 +163,18 @@ Redis 的 Candidate、Running、Operational、Task 使用同一 Redis DB 内的�
 v1 实现本实验需要的 Linux + FRR 配置链路。暂未实现交换机插件、独立进程 Adapter 注册协议、FPM/ZAPI 接收器、Linux ARP/ND 主动保活、全网拓扑聚合、资源级自动差异规划，以及主机重启后全部 Linux 配置自动重建。Agent 进程重启会恢复任务日志；管理断线不会主动清除网络配置。
 
 运行数据、token、二进制和测试产物保存在被 Git 忽略的 `lab/state/`、`bin/`、`artifacts/`，不应作为源码提交。
+
+
+### Snort3 IPS（可选）
+
+VPP 组合镜像支持 Snort3 与 confd，规则存入已有 Redis；Agent 不新增 etcd。
+在 agent.conf 设置 ``ips.enabled=true``（同时启用 VPP 和内置 Redis），
+通过 Web 的 **IPS 配置** 页提交规则与三层接口/BVI 绑定。
+规则更新先校验再热重载，确认 Snort 完成后才报告成功。
+构建、启动、日志与转发边界见 [IPS 用户手册](docs/user/ips.rst)，
+内部流程见 [IPS 开发设计](docs/developer/ips.rst)。
+
+Snort 基础参数可通过 ``ips.configFile`` 指定宿主机只读挂载的 Lua 文件。
+默认修改后执行 ``docker exec <容器名> sdn-snort-reload``，
+或启用 ``ips.autoReload`` 自动校验重载；Web 托管规则独立保留。
+详细挂载命令与失败恢复行为见 [IPS 用户手册](docs/user/ips.rst)。

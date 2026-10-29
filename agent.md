@@ -1,5 +1,33 @@
 # SDN Controller 与 Agent 能力及组件设计
 
+## 2026-10-29：Snort 外部基础配置
+
+- ips.configFile 指定管理员只读挂载的 Lua，默认 /etc/sdn-agent/snort/base.lua。
+- ips.autoReload 默认 false；sdn-snort-reload 手动校验重载，可选两次稳定轮询自动加载。
+- 基础参数快照与 Web 托管规则组合；保持 ips 的其他选项，inline/rules/include 由 Agent 管理。
+- 规则操作和基础重载串行，失败恢复上一份已接受快照；额外 include 不自动监控或快照。
+- IPS_STATUS 与 Web 查询展示路径、待加载、错误和自动重载状态。
+- 冷启动文件缺失或无效拒绝启动；宿主机挂载目录以支持编辑器的原子替换。
+- 31 项隔离容器检查、12 项 Snort runtime 单测、25 项容器单测、相关 Go 测试、21 项 Web 单测/类型检查/构建通过。
+- 默认基础配置与规则 include 拒绝经过实际 Snort 校验；两个项目 Sphinx 严格构建通过。
+- 验收报告：配套 Agent 仓库 artifacts/ips/external-20261029-094908/verification.json。
+- 软件 TAP 双栈测试；测试容器已清理，现有运行环境与 v1.0 镜像保持不变。代码未提交或推送。
+
+## 2026-10-28：Snort IPS（Redis + confd）
+
+本次实现采用 Agent 现有 Redis，不在 Agent 新增 etcd。Controller 保持原有存储。
+新增 IPS_RULE / IPS_INTERFACE 和 IPS_STATUS / IPS_RULES，能力 snort-ips/v1。
+Web 独立 IPS 页面复用候选、预览、事务提交、Undo 和实际查询。
+confd 按次生成完整 Lua，Snort 校验后热重载，确认完成及代次后才接受配置；
+失败恢复旧配置。接口使用 VPP 原生名称，IP feature arcs 不覆盖纯二层转发。
+默认 IPS 关闭；VPP 镜像安装 Snort，启用后在 Agent 容器内运行。
+已完成镜像构建和软件隔离验收：31 项 Python、20 项 Web 单测、三仓库 Go 测试、
+20 项 IPS API/转发/重启检查、真实浏览器创建/查询/删除规则，以及 29 项 EVPN 双栈回归通过。
+报告位于配套 Agent 仓库 artifacts/ips/redis-20261028-164849/verification.json。
+浏览器首次因测试选择器未等待加载完成失败，修正后复测通过；原始记录保留。
+未测试物理 NIC 或吞吐性能；未替换现有运行容器和 v1.0 镜像；没有提交或推送代码。
+
+
 ## 2026-10-28：VXLAN 外层 VRF 创建与修改
 
 已实现配置字段 encapVrfId / protobuf encap_vrf_id，默认 0，与 BD/BVI 的内层租户 VRF 独立。

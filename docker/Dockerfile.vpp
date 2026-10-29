@@ -3,6 +3,8 @@
 # PAPI + adapter MUST come from the same VPP image as the native plugins.
 ARG VPP_IMAGE=alpine/vpp:sdn-base
 ARG FRR_IMAGE=alpine/frr:sdn-base
+ARG SNORT_IMAGE=alpine/snort:sdn-base
+FROM ${SNORT_IMAGE} AS snort
 FROM ${VPP_IMAGE} AS vpp
 FROM redis:7.4-alpine AS redis
 FROM golang:1.25-alpine3.22 AS agent-build
@@ -19,6 +21,17 @@ RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache
     CGO_ENABLED=0 go build -trimpath -o /out/sdn-agent-mcp ./mcp/cmd/sdn-agent-mcp
 
 FROM ${FRR_IMAGE}
+ARG SOURCE_REVISION=unknown
+LABEL org.opencontainers.image.title="SDN Agent VPP FRR Snort" \
+      org.opencontainers.image.source="https://github.com/nanfengnan1/sdn-agent" \
+      org.opencontainers.image.revision="${SOURCE_REVISION}"
+COPY --from=snort /usr/bin/snort /usr/bin/snort
+COPY --from=snort /usr/etc/snort /usr/etc/snort
+COPY --from=snort /usr/lib/snort /usr/lib/snort
+COPY --from=snort /usr/lib/libdaq* /usr/lib/
+COPY --from=snort /usr/lib/daq /usr/lib/daq
+COPY --from=snort /usr/share/sdn-snort /usr/share/sdn-snort
+COPY --from=snort /usr/local/bin/confd /usr/local/bin/confd
 COPY --from=vpp /usr/bin/vpp* /usr/bin/
 COPY --from=vpp /usr/lib/libv*.so* /usr/lib/
 COPY --from=vpp /usr/lib/libsvm.so* /usr/lib/
@@ -26,10 +39,10 @@ COPY --from=vpp /usr/lib/liblcp.so* /usr/lib/
 COPY --from=vpp /usr/lib/vpp_plugins /usr/lib/vpp_plugins
 COPY --from=vpp /usr/share/vpp /usr/share/vpp
 COPY --from=vpp /opt/dpdk /opt/dpdk
-COPY --from=vpp /usr/lib/libdaq* /usr/lib/
+COPY --from=vpp /usr/lib/daq /usr/lib/daq
 RUN apk add --no-cache pax-utils procps util-linux libnl3 libmnl numactl libpcap \
     libelf libunwind openssl zlib lz4-libs libstdc++ libgcc jansson libbsd \
-    libarchive libatomic isa-l rdma-core && \
+    libarchive libatomic isa-l rdma-core libdnet hwloc luajit pcre2 xz-libs libtirpc py3-redis && \
     addgroup -S redis && adduser -S -D -H -G redis redis && \
     mkdir -p /usr/share/sdn-agent/frr /var/lib/sdn-agent /var/lib/redis /etc/sdn-agent /etc/vpp /run/vpp/log && \
     cp /etc/frr/daemons /usr/share/sdn-agent/frr/daemons
@@ -41,6 +54,9 @@ COPY sdn-agent/docker/frr.conf sdn-agent/docker/vtysh.conf /usr/share/sdn-agent/
 COPY sdn-agent/docker/entrypoint.sh /usr/local/bin/sdn-agent-entrypoint
 COPY sdn-agent/docker/healthcheck.sh /usr/local/bin/sdn-agent-healthcheck
 COPY sdn-agent/docker/supervisor.py /usr/local/lib/sdn-agent/supervisor.py
+COPY sdn-agent/docker/snort/runtime.py /usr/local/lib/sdn-agent/snort/runtime.py
+COPY sdn-agent/docker/snort/snort.lua.tmpl sdn-agent/docker/snort/snort.toml sdn-agent/docker/snort/base.lua /etc/sdn-agent/snort/
+COPY --chmod=755 sdn-agent/docker/snort/reload.sh /usr/local/bin/sdn-snort-reload
 COPY sdn-agent/docker/agent.conf /etc/sdn-agent/agent.conf
 COPY sdn-agent/docker/vpp/startup.conf /etc/vpp/startup.conf
 ENV PYTHONPATH=/usr/local/lib/sdn-agent LD_LIBRARY_PATH=/usr/lib:/opt/dpdk/lib
@@ -49,6 +65,9 @@ RUN chmod 755 /usr/local/bin/sdn-agent-entrypoint /usr/local/bin/sdn-agent-healt
     missing="$(find /opt/dpdk/lib -type f -name '*.so*' -exec ldd '{}' ';' 2>&1 \
       | grep 'Error loading shared library' || true)" && \
     { test -z "$missing" || { printf '%s\n' "$missing" >&2; exit 1; }; }
+RUN test -x /usr/local/bin/sdn-snort-reload && \
+    test -s /etc/sdn-agent/snort/base.lua && test -s /usr/lib/daq/libdaq_vpp.so && \
+    snort -V && confd -version
 EXPOSE 9090
 STOPSIGNAL SIGTERM
 HEALTHCHECK --interval=10s --timeout=10s --start-period=90s --retries=3 \

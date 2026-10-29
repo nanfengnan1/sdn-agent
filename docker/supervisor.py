@@ -205,6 +205,24 @@ def vpp_api_ready(config):
         return False
 
 
+def ips_ready(config):
+    try:
+        import http.client
+        connection = http.client.HTTPConnection("localhost", timeout=5)
+        connection.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        connection.sock.settimeout(5)
+        connection.sock.connect(config["ips"]["socket"])
+        try:
+            connection.request("POST", "/status", body="null")
+            response = connection.getresponse()
+            response.read()
+            return response.status == 200
+        finally:
+            connection.close()
+    except (OSError, ValueError):
+        return False
+
+
 def write_runtime(config, agent, redis):
     data = {'config': config, 'agentPid': agent.pid, 'redisPid': redis.pid if redis else None}
     temp = RUNTIME.with_suffix('.tmp')
@@ -241,6 +259,8 @@ def healthcheck():
             return 1
         if config["agent"].get("dataplane", "linux") == "vpp" and not vpp_ready(config):
             return 1
+        if config.get("ips", {}).get("enabled") and not ips_ready(config):
+            return 1
         return 0
     except (OSError, ValueError, KeyError, TypeError):
         return 1
@@ -261,7 +281,7 @@ def main(args):
     RUNTIME.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     os.chmod(RUNTIME.parent, 0o700)
     RUNTIME.unlink(missing_ok=True)
-    redis = agent = vpp = adapter = None
+    redis = agent = vpp = adapter = ips = None
     frr_started = False
     result = 1
     try:
@@ -319,9 +339,17 @@ def main(args):
             frr_started = True
             subprocess.run([FRR_INIT, "start"], check=True, timeout=40)
             wait_ready(frr_ready, 30, "FRR", (redis,) if redis else ())
+        if config.get("ips", {}).get("enabled"):
+            ips_config = RUNTIME.parent / "ips-config.json"
+            ips_config.write_text(json.dumps(config))
+            os.chmod(ips_config, 0o600)
+            ips = subprocess.Popen(["python3", "/usr/local/lib/sdn-agent/snort/runtime.py",
+                                    "--config", str(ips_config)])
+            wait_ready(lambda: ips_ready(config), config["ips"]["startupTimeoutSeconds"],
+                       "Snort IPS", (ips, vpp, redis))
         agent = subprocess.Popen(["sdn-agent", *args])
         children = tuple(
-            child for child in (agent, redis, vpp, adapter) if child is not None
+            child for child in (agent, redis, vpp, adapter, ips) if child is not None
         )
         wait_ready(lambda: tcp_ready(config["agent"]["listen"]), 45, "Agent", children)
         write_runtime(config, agent, redis)
@@ -354,6 +382,8 @@ def main(args):
         # Keep the journal and network backend available while Agent drains its
         # active task/rollback. Container stop_grace_period must allow this wait.
         stop_child(agent, 120)
+        if ips:
+            stop_child(ips, 80)
         if adapter:
             stop_child(adapter, 15)
         if frr_started:

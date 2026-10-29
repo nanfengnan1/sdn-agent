@@ -44,6 +44,7 @@ type Redis struct {
 }
 
 type Config struct {
+	IPS   IPS   `json:"ips"`
 	Agent Agent `json:"agent"`
 	Redis Redis `json:"redis"`
 	VPP   VPP   `json:"vpp"`
@@ -58,6 +59,15 @@ type VPP struct {
 	StartupTimeoutSeconds int    `json:"startupTimeoutSeconds"`
 }
 
+// IPS uses the bundled Redis. Snort and confd are supplied by the VPP bundle.
+type IPS struct {
+	ConfigFile            string `json:"configFile"`
+	AutoReload            bool   `json:"autoReload"`
+	Enabled               bool   `json:"enabled"`
+	Socket                string `json:"socket"`
+	TemplateDir           string `json:"templateDir"`
+	StartupTimeoutSeconds int    `json:"startupTimeoutSeconds"`
+}
 type Options struct {
 	Config
 	ConfigPath string
@@ -66,6 +76,7 @@ type Options struct {
 
 func Defaults() Config {
 	return Config{
+		IPS:   IPS{ConfigFile: "/etc/sdn-agent/snort/base.lua", Socket: "/run/sdn-agent/ips.sock", TemplateDir: "/etc/sdn-agent/snort", StartupTimeoutSeconds: 90},
 		Agent: Agent{Listen: ":9090", StateDir: "/var/lib/sdn-agent", FRR: true, Dataplane: "linux"},
 		VPP:   VPP{StartupConfig: "/etc/vpp/startup.conf", APISocket: "/run/vpp/api.sock", AdapterSocket: "/run/sdn-agent/vpp.sock", StartupTimeoutSeconds: 60},
 		Redis: Redis{Bind: "127.0.0.1", Port: 6379, DataDir: "/var/lib/redis", AppendOnly: true,
@@ -231,6 +242,26 @@ func decode(data []byte, into *Config) error {
 }
 
 func (c Config) Validate() error {
+	if c.IPS.Enabled {
+		if c.Agent.Dataplane != "vpp" || !c.Redis.Enabled {
+			return errors.New("IPS requires VPP and bundled Redis; use the VPP bundle image")
+		}
+		for _, path := range []string{c.IPS.Socket, c.IPS.TemplateDir, c.IPS.ConfigFile} {
+			if !filepath.IsAbs(path) || filepath.Clean(path) == "/" || strings.ContainsAny(path, "\x00\r\n") {
+				return errors.New("IPS socket, templateDir and configFile must be absolute non-root paths")
+			}
+		}
+		if filepath.Clean(c.IPS.ConfigFile) == filepath.Join(c.Agent.StateDir, "ips", "snort.lua") {
+			return errors.New("ips.configFile must differ from the generated configuration")
+		}
+		if c.IPS.Socket == c.VPP.AdapterSocket || c.IPS.Socket == c.VPP.APISocket {
+			return errors.New("IPS and VPP sockets must differ")
+		}
+		if c.IPS.StartupTimeoutSeconds < 1 || c.IPS.StartupTimeoutSeconds > 600 {
+			return errors.New("ips.startupTimeoutSeconds must be 1..600")
+		}
+	}
+
 	if c.Agent.Dataplane != "linux" && c.Agent.Dataplane != "vpp" {
 		return errors.New("agent.dataplane must be linux or vpp")
 	}

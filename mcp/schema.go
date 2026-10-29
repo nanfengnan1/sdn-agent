@@ -61,6 +61,9 @@ func fieldSchema(f protoreflect.FieldDescriptor) schema {
 // Explain backend semantics in tools/list without narrowing the shared protocol
 // to one dataplane. Actual support and validation remain authoritative in Agent.
 var messageDescriptions = map[protoreflect.FullName]string{
+	"sdn.agent.v1.IpsRule":      "Snort3 text rule. Requires snort-ips/v1; sid must match the rule SID. No Lua, shell or include directives. CREATE/SET/DELETE are acknowledged only after validated reload.",
+	"sdn.agent.v1.IpsInterface": "Bind a VPP native interface (not its Linux mirror) to the node Snort instance; direction input, output or inout. Requires snort-ips/v1. Disconnect policy is drop.",
+
 	"sdn.agent.v1.Operation": "Typed network intent for the configured Agent backend. Read capabilities first. Does not accept shell commands, VPP CLI, startup files or dataplane changes.",
 	"sdn.agent.v1.Tenant":    "Linux VRF; in VPP mode also owns independent IPv4/IPv6 tenant FIBs. The tenant table ID is distinct from a VNI or BD ID.",
 	"sdn.agent.v1.Bridge":    "Linux bridge; in VPP mode maps to an owned BD and, when tenant-bound, a BVI. VPP does not support STP.",
@@ -165,6 +168,7 @@ var operationPayloads = []struct {
 	field string
 }{
 	{pb.OpCode_NEIGHBOR_KEEPALIVE, "neighbor_keepalive"},
+	{pb.OpCode_IPS_RULE, "ips_rule"}, {pb.OpCode_IPS_INTERFACE, "ips_interface"},
 	{pb.OpCode_NODE_NETWORK, "network"}, {pb.OpCode_INTERFACE, "interface"},
 	{pb.OpCode_ADDRESS, "address"}, {pb.OpCode_TENANT, "tenant"}, {pb.OpCode_BD, "bridge"},
 	{pb.OpCode_BD_PORT, "bridge_port"}, {pb.OpCode_BD_TENANT, "binding"},

@@ -14,6 +14,7 @@ import (
 	pb "sdn-agent/api/agent/v1"
 	"sdn-agent/internal/adapters/frr"
 	"sdn-agent/internal/adapters/linux"
+	"sdn-agent/internal/adapters/snort"
 	"sdn-agent/internal/adapters/vpp"
 	"sdn-agent/internal/agent"
 	"sdn-agent/internal/backend"
@@ -103,6 +104,16 @@ func run() error {
 		drivers = []backend.Driver{&vpp.Driver{Linux: &linux.Driver{Runner: backend.Exec{}}, RPC: client}, &vpp.RoutingDriver{Driver: &frr.Driver{Runner: backend.Exec{}}}}
 	} else if *useFRR {
 		drivers = append(drivers, &frr.Driver{Runner: backend.Exec{}})
+	}
+	if opts.IPS.Enabled {
+		client := snort.NewClient(opts.IPS.Socket)
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		err := client.Call(ctx, "status", nil, nil)
+		cancel()
+		if err != nil {
+			return err
+		}
+		drivers = append(drivers, &snort.Driver{RPC: client})
 	}
 	registry, e := backend.New(drivers...)
 	if e != nil {

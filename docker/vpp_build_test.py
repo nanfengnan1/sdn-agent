@@ -38,6 +38,7 @@ class BuildInputsTests(unittest.TestCase):
             for key, value in os.environ.items()
             if not key.startswith(
                 (
+                    "SNORT_",
                     "VPP_",
                     "FRR_",
                     "BUILD_",
@@ -90,7 +91,7 @@ class BuildInputsTests(unittest.TestCase):
             ALPINE_VERSION="3.22",
         )
         self.assertEqual(result.returncode, 0, result.stderr)
-        frr, vpp, bundle = self.calls()
+        snort, frr, vpp, bundle = self.calls()
         for call, component, ref in (
             (frr, "FRR", "frr-custom"),
             (vpp, "VPP", "abc123"),
@@ -111,7 +112,9 @@ class BuildInputsTests(unittest.TestCase):
     def test_default_git_build_selects_sdn_vpp_branch_and_frr_tag(self):
         result = self.run_build(BUILD_BASES="1")
         self.assertEqual(result.returncode, 0, result.stderr)
-        frr, vpp, bundle = self.calls()
+        snort, frr, vpp, bundle = self.calls()
+        self.assertIn("SNORT_REF=3.12.2.0", snort)
+        self.assertIn("SNORT_IMAGE=alpine/snort:sdn-base", bundle)
         self.assertIn("FRR_REF=frr-10.7.0", frr)
         self.assertIn("VPP_REF=sdn/v26.06", vpp)
         self.assertIn("VPP_REPOSITORY=https://github.com/nanfengnan1/vpp.git", vpp)
@@ -130,7 +133,7 @@ class BuildInputsTests(unittest.TestCase):
             BUILD_BASES="1", VPP_SOURCE=str(source), FRR_SOURCE=str(source)
         )
         self.assertEqual(result.returncode, 0, result.stderr)
-        frr, vpp, _ = self.calls()
+        snort, frr, vpp, _ = self.calls()
         for call, component in ((frr, "FRR"), (vpp, "VPP")):
             self.assertIn(f"{component}_SOURCE_MODE=local", call)
             self.assertIn(f"{component.lower()}_source={source}", call)
@@ -142,7 +145,7 @@ class BuildInputsTests(unittest.TestCase):
             BUILD_BASES="1", VPP_SOURCE=str(self.root), FRR_REF="frr-10.7.0"
         )
         self.assertEqual(result.returncode, 0, result.stderr)
-        frr, vpp, _ = self.calls()
+        snort, frr, vpp, _ = self.calls()
         self.assertIn("FRR_SOURCE_MODE=git", frr)
         self.assertIn("VPP_SOURCE_MODE=local", vpp)
 
