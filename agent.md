@@ -1,5 +1,13 @@
 # SDN Controller 与 Agent 能力及组件设计
 
+## 2026-10-29：部署集成与 IPS 租户回归
+
+文档和容器源码版本已提交，部署保留原节点身份及令牌，旧环境已备份。
+Snort IP metadata 与 VPP IP union 重叠导致 BVI 冷 IPv6 邻居学习失败；配套 VPP 已修复。
+lab/snort_ips.py 新增 SDN_IPS_BVI=1：非默认租户、冷 ARP/ND、输入/输出检查与重启。
+验收及当前部署记录保存在 artifacts/deploy/ips-20261029-102223；结果以报告为准。
+
+
 ## 2026-10-29：Snort 外部基础配置
 
 - ips.configFile 指定管理员只读挂载的 Lua，默认 /etc/sdn-agent/snort/base.lua。

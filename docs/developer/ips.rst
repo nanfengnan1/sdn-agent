@@ -189,3 +189,22 @@ PID 不变、配置代次变化、错误配置回滚和重启持久化。
 25 项容器单测、相关 Go 包测试、21 项 Web 单测及类型检查/构建。
 默认配置组合与禁止基础文件规则 include 使用实际 Snort 校验。
 报告位于 ``artifacts/ips/external-20261029-094908/verification.json``。
+
+租户 BVI 冷邻居回归
+-------------------
+
+设置 ``SDN_IPS_BVI=1`` 运行同一脚本，可将接入 TAP 放入独立 BD，
+通过 BVI 和非默认租户 FIB 1001 进行双栈路由，再绑定 IPS。
+测试主动清空隔离容器内的邻居，验证输入检查时重新学习 ARP/ND，
+以及 inout 检查后的输出 rewrite；随后执行规则增删、阻断和重启恢复。
+
+.. code-block:: console
+
+   SDN_IPS_BVI=1 SDN_IPS_IMAGE=alpine/sdn-agent:v1.0 \
+   SDN_CONTROLLER_IMAGE=alpine/sdn-controller:v1.0 \
+   SDN_WEB_IMAGE=alpine/sdn-web:v1.0 \
+   python3 lab/snort_ips.py
+
+VPP IP feature arc 的 DAQ 元数据必须保存在描述符中，不能覆盖 buffer 的
+IP adjacency/FIB/rewrite union。SFDP 的自定义 continuation 保持原协议。
+本回归不覆盖主动响应报文注入或吞吐性能。

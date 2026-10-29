@@ -20,6 +20,8 @@ OUT = Path(os.environ.get("SDN_IPS_OUTPUT", ROOT / "artifacts/ips" / STAMP)).res
 OUT.mkdir(parents=True, exist_ok=True)
 TOKEN = secrets.token_urlsafe(24)
 EXTERNAL = os.environ.get("SDN_IPS_EXTERNAL") == "1"
+BVI = os.environ.get("SDN_IPS_BVI") == "1"
+IPS_INTERFACE = "bvi1" if BVI else "tap1"
 IMAGE = os.environ.get("SDN_IPS_IMAGE", "alpine/sdn-agent:ips-test")
 os.environ.setdefault("SDN_CONTROLLER_IMAGE", "alpine/sdn-controller:ips-test")
 os.environ.setdefault("SDN_WEB_IMAGE", "alpine/sdn-web:ips-test")
@@ -71,13 +73,25 @@ def check(label, value):
 
 
 def topology():
+    if BVI:
+        cli("ip table add 1001")
+        cli("ip6 table add 1001")
     for number in (1, 2):
         ns = "ips-pc" + str(number)
         de("ip", "netns", "del", ns, check=False)
         de("ip", "netns", "add", ns)
         cli(f"create tap id {number} host-if-name ips-tap{number}")
-        cli(f"set interface ip address tap{number} 10.{number}.0.1/24")
-        cli(f"set interface ip address tap{number} 2001:db8:{number}::1/64")
+        routed = f"tap{number}"
+        if BVI:
+            routed = f"bvi{number}"
+            cli(f"bvi create instance {number}")
+            cli(f"set interface l2 bridge tap{number} {number}")
+            cli(f"set interface l2 bridge {routed} {number} bvi")
+            cli(f"set interface ip table {routed} 1001")
+            cli(f"set interface ip6 table {routed} 1001")
+            cli(f"set interface state {routed} up")
+        cli(f"set interface ip address {routed} 10.{number}.0.1/24")
+        cli(f"set interface ip address {routed} 2001:db8:{number}::1/64")
         cli(f"set interface state tap{number} up")
         de("ip", "link", "set", "ips-tap" + str(number), "netns", ns)
         de("ip", "-n", ns, "link", "set", "lo", "up")
@@ -177,11 +191,24 @@ finally:
     check("IPv6 baseline", wait(lambda: ping(6)))
     initial = query("IPS_STATUS")[0]
     check("Redis + confd and real VPP DAQ", initial["backend"] == "redis+confd" and initial["daq"] == "vpp")
-    bind = {"code": "IPS_INTERFACE", "action": "CREATE", "ipsInterface": {"name": "tap1", "direction": "input"}}
+    bind = {"code": "IPS_INTERFACE", "action": "CREATE", "ipsInterface": {"name": IPS_INTERFACE, "direction": "input"}}
     edit([bind])
-    check("attached routed TAP", query("IPS_STATUS")[0]["attachedInterfaces"] == {"tap1": "input"})
-    check("IPv4 pass without rules", ping(4))
-    check("IPv6 pass without rules", ping(6))
+    check("attached routed interface", query("IPS_STATUS")[0]["attachedInterfaces"] == {IPS_INTERFACE: "input"})
+    check("IPv4 pass without rules", wait(lambda: ping(4)))
+    check("IPv6 pass without rules", wait(lambda: ping(6)))
+    # Cached neighbors hide corruption of the IPv6 source adjacency metadata.
+    cli("ip neighbor flush")
+    check("cold ARP with IPS input", wait(lambda: ping(4)))
+    check("cold ND with IPS input", wait(lambda: ping(6)))
+    edit([{"code": "IPS_INTERFACE", "action": "SET",
+           "ipsInterface": {"name": IPS_INTERFACE, "direction": "inout"}}])
+    cli("ip neighbor flush")
+    check("IPv4 inout preserves output rewrite", wait(lambda: ping(4)))
+    check("IPv6 inout preserves ND and rewrite", wait(lambda: ping(6)))
+    edit([{"code": "IPS_INTERFACE", "action": "SET",
+           "ipsInterface": {"name": IPS_INTERFACE, "direction": "input"}}])
+    check("IPv4 after input binding restored", wait(lambda: ping(4)))
+    check("IPv6 after input binding restored", wait(lambda: ping(6)))
     block4 = 'drop icmp any any -> any any (msg:"IPS IPv4 acceptance"; itype:8; sid:1000001; rev:1;)'
     block6 = 'drop icmp any any -> any any (msg:"IPS IPv6 acceptance"; itype:128; sid:1000002; rev:1;)'
     if EXTERNAL:
